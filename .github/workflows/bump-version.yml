@@ -10,6 +10,7 @@
 # covering both halves; the approving half grants nothing while main requires
 # zero approvals, but raising that count makes it a bypass worth replacing
 # with a PAT.
+#
 ---
 name: Bump version
 
