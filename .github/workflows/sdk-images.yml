@@ -1,0 +1,88 @@
+# Bakes one SDK image per architecture and release, with the dependency chain
+# qwdtt-client pulls in already compiled. build.yml then starts from a warm
+# tree instead of rebuilding iproute2 and ca-certificates 65 times.
+#
+# Nothing triggers this on a schedule. The images go stale only when the pinned
+# OpenWrt release in .github/openwrt-targets.json moves or qwdtt-client's
+# DEPENDS change, and both are commits a person makes; a cron would rebuild 65
+# images to discover nothing changed.
+---
+name: SDK images
+
+on:
+  workflow_dispatch:
+    inputs:
+      arches:
+        description: Bake only these pkgarchs, space separated. Empty bakes all.
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: sdk-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  arches:
+    name: arches
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Discover the package architectures
+        id: discover
+        env:
+          ARCHES: ${{ inputs.arches }}
+        run: |
+          set -eu
+          set -o pipefail
+          map=.github/openwrt-targets.json
+          ipk=$(jq -r '."24.10".version' "$map")
+          apk=$(jq -r '."25.12".version' "$map")
+          list=$(.github/scripts/openwrt-arches.sh "$ipk" "$apk")
+          if [ -n "${ARCHES:-}" ]; then
+            list=$(printf '%s\n' "$list" |
+              jq -c --arg keep "$ARCHES" \
+                'select(.arch as $a | ($keep | split(" ")) | index($a))')
+            [ -n "$list" ] || { echo "arches='$ARCHES' matched nothing"; exit 1; }
+          fi
+          printf '%s\n' "$list"
+          printf 'matrix=%s\n' "$(printf '%s\n' "$list" | jq -cs 'map({sdk})')" \
+            >> "$GITHUB_OUTPUT"
+
+  bake:
+    name: sdk ${{ matrix.sdk }}
+    needs: arches
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        include: ${{ fromJSON(needs.arches.outputs.matrix) }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .github
+          file: .github/sdk.Dockerfile
+          build-args: ARCH=${{ matrix.sdk }}
+          tags: ghcr.io/${{ github.repository }}/sdk:${{ matrix.sdk }}
+          push: true
