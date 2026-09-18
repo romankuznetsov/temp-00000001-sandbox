@@ -13,7 +13,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=qwdtt-client
 # The repository's tag, shared with qwdtt and luci-app-qwdtt.
-PKG_VERSION:=1.1.1
+PKG_VERSION:=1.1.2
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=
