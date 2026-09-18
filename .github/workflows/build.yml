@@ -6,11 +6,13 @@
 #
 #   check, client      ~1 min, when code changed
 #   packages           ~8 min, when a package directory changed
-#   client-packages    ~6 min per architecture, only when publishing
+#   client-packages    ~8 min per architecture, only when publishing
 #
-# Every SDK job opens by downloading and unpacking the SDK from upstream's
-# image, which is most of its wall clock; the rest is the kernel build that
-# +kmod-tun pulls in.
+# Both SDK jobs start from the image .github/sdk.Dockerfile bakes, which has
+# the dependency chain compiled and, more to the point, has had the SDK's own
+# setup.sh removed: on upstream's image the same jobs take 13 to 16 minutes,
+# and most of the difference is downloading an SDK the container already
+# contains.
 ---
 name: Build
 
@@ -312,9 +314,9 @@ jobs:
           GOARCH: amd64
         run: go build -tags=openwrt -trimpath -ldflags="-s -w" -o ../qwdtt-client/files/qwdtt-client .
 
-      # Our baked image carries the dependency chain already compiled; without
-      # it the job spends four minutes rebuilding iproute2 and ca-certificates.
-      # Falls back to upstream so a repository with nothing baked still builds.
+      # Our baked image skips the SDK download and carries the dependency chain
+      # compiled. Falls back to upstream, so a repository with nothing baked -
+      # a fork, or an architecture the bake has not reached - still builds.
       - name: Log in to ghcr
         uses: docker/login-action@v3
         with:
@@ -478,9 +480,9 @@ jobs:
           GOMIPS64: ${{ matrix.gomips64 }}
         run: go build -tags=openwrt -trimpath -ldflags="-s -w" -o ../qwdtt-client/files/qwdtt-client .
 
-      # Our baked image carries the dependency chain already compiled; without
-      # it the job spends four minutes rebuilding iproute2 and ca-certificates.
-      # Falls back to upstream so a repository with nothing baked still builds.
+      # Our baked image skips the SDK download and carries the dependency chain
+      # compiled. Falls back to upstream, so a repository with nothing baked -
+      # a fork, or an architecture the bake has not reached - still builds.
       - name: Log in to ghcr
         uses: docker/login-action@v3
         with:
