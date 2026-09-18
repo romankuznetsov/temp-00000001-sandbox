@@ -38,7 +38,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 # Two pushes in quick succession would otherwise pay for two full builds, and
 # the first result is stale the moment the second lands. Tag runs opt out of
@@ -282,6 +281,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Pulls our baked SDK image below.
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -449,6 +450,7 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
