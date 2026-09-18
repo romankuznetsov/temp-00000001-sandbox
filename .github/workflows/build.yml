@@ -38,6 +38,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 # Two pushes in quick succession would otherwise pay for two full builds, and
 # the first result is stale the moment the second lands. Tag runs opt out of
@@ -310,6 +311,30 @@ jobs:
           GOARCH: amd64
         run: go build -tags=openwrt -trimpath -ldflags="-s -w" -o ../qwdtt-client/files/qwdtt-client .
 
+      # Our baked image carries the dependency chain already compiled; without
+      # it the job spends four minutes rebuilding iproute2 and ca-certificates.
+      # Falls back to upstream so a repository with nothing baked still builds.
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pick the SDK image
+        id: sdk
+        env:
+          TAG: ${{ matrix.arch }}
+        run: |
+          ours=ghcr.io/${{ github.repository }}/sdk
+          if docker manifest inspect "$ours:$TAG" >/dev/null 2>&1; then
+            echo "using $ours"
+            echo "container=$ours" >> "$GITHUB_OUTPUT"
+          else
+            echo "$ours:$TAG is not baked; using upstream"
+            echo "container=ghcr.io/openwrt/sdk" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build with the OpenWrt SDK
         # Pinned, not @main. The action's entrypoint decides how the feed is
         # wired, which packages are built and where the output lands, so
@@ -319,7 +344,7 @@ jobs:
         # statement while both run the same entrypoint.
         uses: openwrt/gh-action-sdk@v11
         env:
-          CONTAINER: ghcr.io/openwrt/sdk
+          CONTAINER: ${{ steps.sdk.outputs.container }}
           ARCH: ${{ matrix.arch }}
           FEEDNAME: qwdtt
           # qwdtt-client is not named here, but qwdtt depends on it, so the SDK
@@ -451,10 +476,34 @@ jobs:
           GOMIPS64: ${{ matrix.gomips64 }}
         run: go build -tags=openwrt -trimpath -ldflags="-s -w" -o ../qwdtt-client/files/qwdtt-client .
 
+      # Our baked image carries the dependency chain already compiled; without
+      # it the job spends four minutes rebuilding iproute2 and ca-certificates.
+      # Falls back to upstream so a repository with nothing baked still builds.
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pick the SDK image
+        id: sdk
+        env:
+          TAG: ${{ matrix.sdk }}
+        run: |
+          ours=ghcr.io/${{ github.repository }}/sdk
+          if docker manifest inspect "$ours:$TAG" >/dev/null 2>&1; then
+            echo "using $ours"
+            echo "container=$ours" >> "$GITHUB_OUTPUT"
+          else
+            echo "$ours:$TAG is not baked; using upstream"
+            echo "container=ghcr.io/openwrt/sdk" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build with the OpenWrt SDK
         uses: openwrt/gh-action-sdk@v11
         env:
-          CONTAINER: ghcr.io/openwrt/sdk
+          CONTAINER: ${{ steps.sdk.outputs.container }}
           ARCH: ${{ matrix.sdk }}
           FEEDNAME: qwdtt
           PACKAGES: qwdtt-client
