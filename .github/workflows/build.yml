@@ -346,6 +346,7 @@ jobs:
         env:
           CONTAINER: ${{ steps.sdk.outputs.container }}
           ARCH: ${{ matrix.arch }}
+          V: s
           FEEDNAME: qwdtt
           # qwdtt-client is not named here, but qwdtt depends on it, so the SDK
           # builds it anyway. The upload below drops it: client-packages is
