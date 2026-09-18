@@ -92,7 +92,10 @@ detect_pkgarch() {
 		arch=$(opkg print-architecture 2>/dev/null |
 			awk 'BEGIN{m=0}{if($3>m){m=$3;a=$2}}END{print a}' || true)
 	fi
-	[ -n "$arch" ] || arch=$(uname -m)
+	# No fallback to uname -m: it answers mips or aarch64, never a package
+	# architecture like mipsel_24kc, so it would build a feed URL certain to
+	# 404 and hide the real problem behind an apk update failure.
+	[ -n "$arch" ] || die "could not determine the package architecture. Report this with the output of 'ubus call system board'."
 	printf '%s\n' "$arch"
 }
 
