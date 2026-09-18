@@ -106,6 +106,10 @@ jobs:
       full: true
     permissions:
       contents: read
+      # A called workflow cannot ask for more than the calling job was given, so
+      # leaving this out fails the whole run before a job starts: build.yml
+      # pulls our baked SDK images from ghcr.
+      packages: read
     secrets: inherit
 
   # A signed apk repository, which is the only way a LuCI-only user can install
