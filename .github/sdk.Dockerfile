@@ -21,5 +21,14 @@ RUN ./scripts/feeds update -a \
 	&& make defconfig \
 	&& make -j"$(nproc)" package/iproute2/compile package/ca-certificates/compile
 
+# The build above leaves staging_dir/host/bin/gcc pointing at /usr/bin/cc,
+# which does not exist here - the host compiler is /usr/bin/gcc. The link is
+# broken from the moment it is made, and nothing in this file follows it, so
+# the bake stays green and the breakage surfaces later: the first job that
+# builds a host tool dies with "No such file or directory" naming a path that
+# is plainly there. Drop broken links and let the run recreate them, which is
+# what already happens on the upstream image, where they are absent.
+RUN find staging_dir/host/bin -xtype l -delete
+
 # No ENTRYPOINT on purpose. gh-action-sdk builds its own image FROM this one
 # and adds the entrypoint itself; that is what the CONTAINER variable selects.
