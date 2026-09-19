@@ -5,53 +5,122 @@ USE_PROCD=1
 START=95
 STOP=10
 
-start_service() {
+CLIENT=/usr/bin/qwdtt-client
+# procd tags the system log with basename(argv[0]), so every instance would
+# appear as "qwdtt-client" and no filter could tell them apart. Exec a
+# per-section symlink instead: the tag becomes qwdtt-<section>, and
+# 'logread -e qwdtt' still matches all of them.
+LINKDIR=/var/run/qwdtt
+
+# Collected over every enabled section before any of them starts. Two tunnels
+# that share a TUN name, a routing table or a rule priority break each other,
+# and the one at fault is not the one that fails: whichever starts second
+# takes the first one's traffic, and whichever stops first strands the other.
+TUNS=
+TABLES=
+PRIOS=
+CATCHALL_PRIO=
+
+collect() {
+	local cfg="$1"
+	local enabled tun_name route_table rule_priority fwmark
+
+	config_get_bool enabled "$cfg" enabled 0
+	[ "$enabled" -eq 1 ] || return 0
+
+	config_get tun_name      "$cfg" tun_name qwdtt0
+	config_get route_table   "$cfg" route_table 51820
+	config_get rule_priority "$cfg" rule_priority 10000
+	config_get fwmark        "$cfg" fwmark
+
+	TUNS="$TUNS $tun_name"
+	TABLES="$TABLES $route_table"
+	PRIOS="$PRIOS $rule_priority"
+	[ -n "$fwmark" ] || CATCHALL_PRIO=$rule_priority
+}
+
+occurrences() {
+	local needle="$1" item n=0
+
+	for item in $2; do
+		[ "$item" = "$needle" ] && n=$((n + 1))
+	done
+	echo "$n"
+}
+
+start_instance() {
+	local cfg="$1"
 	local enabled mode peer_host peer_port password device_id workers
 	local dns obfs captcha_mode vk_auth vk_anon_path tun_name lan_interface
-	local no_dtls turn_tcp hashes
+	local no_dtls turn_tcp hashes route_table rule_priority fwmark
 
-	config_load qwdtt
-	config_get_bool enabled main enabled 0
+	config_get_bool enabled "$cfg" enabled 0
 	[ "$enabled" -eq 1 ] || return 0
 
 	# mode is passed explicitly: the client derives its own default from
 	# whether -config was given, and this service never gives it.
-	config_get mode          main mode rawtun
-	config_get peer_host     main peer_host
-	config_get peer_port     main peer_port
-	config_get password      main password
-	config_get device_id     main device_id
-	config_get workers       main workers 9
-	config_get dns           main dns yandex
-	config_get obfs          main obfs audio
-	config_get captcha_mode  main captcha_mode auto
-	config_get vk_auth       main vk_auth anonymous
-	config_get vk_anon_path  main vk_anon_path vkcalls
-	config_get tun_name      main tun_name qwdtt0
-	config_get lan_interface main lan_interface
-	config_get_bool no_dtls  main no_dtls 0
-	config_get_bool turn_tcp main turn_tcp 0
+	config_get mode          "$cfg" mode rawtun
+	config_get peer_host     "$cfg" peer_host
+	config_get peer_port     "$cfg" peer_port
+	config_get password      "$cfg" password
+	config_get device_id     "$cfg" device_id
+	config_get workers       "$cfg" workers 9
+	config_get dns           "$cfg" dns yandex
+	config_get obfs          "$cfg" obfs audio
+	config_get captcha_mode  "$cfg" captcha_mode auto
+	config_get vk_auth       "$cfg" vk_auth anonymous
+	config_get vk_anon_path  "$cfg" vk_anon_path vkcalls
+	config_get tun_name      "$cfg" tun_name qwdtt0
+	config_get lan_interface "$cfg" lan_interface
+	config_get route_table   "$cfg" route_table 51820
+	config_get rule_priority "$cfg" rule_priority 10000
+	config_get fwmark        "$cfg" fwmark
+	config_get_bool no_dtls  "$cfg" no_dtls 0
+	config_get_bool turn_tcp "$cfg" turn_tcp 0
 
 	# The client wants one comma-separated -vk value; UCI lists arrive
 	# space-separated and a VK hash contains no spaces.
-	config_get hashes main hash
+	config_get hashes "$cfg" hash
 	hashes=$(echo "$hashes" | tr -s ' ' ',' | sed -e 's/^,//' -e 's/,$//')
 
 	[ -n "$peer_host" ] || {
-		logger -t qwdtt "qwdtt.main.peer_host is not set"
+		logger -t qwdtt "qwdtt.$cfg.peer_host is not set"
 		return 1
 	}
 	[ -n "$hashes" ] || {
-		logger -t qwdtt "qwdtt.main.hash is empty"
+		logger -t qwdtt "qwdtt.$cfg.hash is empty"
 		return 1
 	}
+	[ "$(occurrences "$tun_name" "$TUNS")" -eq 1 ] || {
+		logger -t qwdtt "qwdtt.$cfg: tun_name $tun_name is not unique"
+		return 1
+	}
+	[ "$(occurrences "$route_table" "$TABLES")" -eq 1 ] || {
+		logger -t qwdtt "qwdtt.$cfg: route_table $route_table is not unique"
+		return 1
+	}
+	[ "$(occurrences "$rule_priority" "$PRIOS")" -eq 1 ] || {
+		logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority is not unique"
+		return 1
+	}
+	# A section without a mark takes everything arriving from the LAN, so its
+	# rule has to be consulted last or it answers for the marked ones too.
+	# Lower number, higher precedence.
+	if [ -n "$fwmark" ] && [ -n "$CATCHALL_PRIO" ]; then
+		[ "$rule_priority" -lt "$CATCHALL_PRIO" ] || {
+			logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority must be below $CATCHALL_PRIO, the priority of the section that has no fwmark"
+			return 1
+		}
+	fi
 
-	procd_open_instance
-	# Exec'd directly rather than through `sh -c`: procd tags the system log
-	# with the program's name, so a shell wrapper labels every client line
-	# `sh` and 'logread -e qwdtt' then matches none of them. Each value is its
-	# own argument, so no shell re-parses the password either.
-	procd_set_param command /usr/bin/qwdtt-client \
+	mkdir -p "$LINKDIR"
+	ln -sf "$CLIENT" "$LINKDIR/qwdtt-$cfg"
+
+	procd_open_instance "$cfg"
+	# Exec'd directly rather than through `sh -c`: procd tags the log with the
+	# program's name, so a shell wrapper labels every client line `sh`. Each
+	# value is its own argument, so no shell re-parses the password either.
+	procd_set_param command "$LINKDIR/qwdtt-$cfg" \
 		-mode "$mode" \
 		-peer "${peer_host}${peer_port:+:$peer_port}" \
 		-vk "$hashes" \
@@ -63,8 +132,11 @@ start_service() {
 		-captcha-mode "$captcha_mode" \
 		-vk-auth "$vk_auth" \
 		-vk-anon-path "$vk_anon_path" \
-		-tun-name "$tun_name"
+		-tun-name "$tun_name" \
+		-route-table "$route_table" \
+		-rule-priority "$rule_priority"
 	[ -n "$lan_interface" ] && procd_append_param command -lan-interface "$lan_interface"
+	[ -n "$fwmark" ] && procd_append_param command -route-fwmark "$fwmark"
 	# Only passed when on: Go's flag package reads a bare -notls as true.
 	[ "$no_dtls" -eq 1 ] && procd_append_param command -notls
 	[ "$turn_tcp" -eq 1 ] && procd_append_param command -turn-tcp
@@ -75,6 +147,23 @@ start_service() {
 	procd_set_param respawn 10 5 0
 	procd_set_param limits nofile="65535 65535"
 	procd_close_instance
+}
+
+start_one() {
+	local cfg="$1" section="$2"
+
+	# No name: every section. A name: exactly that one, which is what
+	# `/etc/init.d/qwdtt start <section>` and the LuCI buttons pass.
+	[ -z "$section" ] || [ "$section" = "$cfg" ] || return 0
+	start_instance "$cfg"
+}
+
+start_service() {
+	local section="$1"
+
+	config_load qwdtt
+	config_foreach collect qwdtt
+	config_foreach start_one qwdtt "$section"
 }
 
 service_triggers() {
