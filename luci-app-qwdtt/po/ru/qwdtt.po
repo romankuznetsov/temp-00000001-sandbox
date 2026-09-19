@@ -68,50 +68,53 @@ msgstr "Выполняется %s..."
 msgid "%s failed: %s"
 msgstr "%s не удалось: %s"
 
-msgid "Collecting data..."
-msgstr "Сбор данных..."
+msgid "One section per tunnel, all running at once. A second tunnel needs its own TUN device and routing table, and a firewall mark to say which traffic it carries: the tunnel without a mark takes everything arriving from the LAN."
+msgstr "Одна секция на туннель, все работают одновременно. Второму туннелю нужны свои устройство TUN и таблица маршрутизации, а также метка межсетевого экрана, определяющая, какой трафик он несет: туннель без метки забирает весь трафик из локальной сети."
 
-msgid "No status."
-msgstr "Нет данных о состоянии."
+msgid "Add tunnel"
+msgstr "Добавить туннель"
 
-msgid "Unable to read status:"
-msgstr "Не удалось получить состояние:"
+msgid "Peer"
+msgstr "Сервер"
 
-msgid "Not checked. The test sends pings through the tunnel, so it runs only on request."
-msgstr "Не проверялось. Тест отправляет пакеты через туннель, поэтому запускается только по запросу."
+msgid "Carries"
+msgstr "Трафик"
 
-msgid "Refreshes every 10 seconds."
-msgstr "Обновляется каждые 10 секунд."
+msgid "marked %s"
+msgstr "с меткой %s"
 
-msgid "Actions"
-msgstr "Действия"
+msgid "everything from the LAN"
+msgstr "весь из локальной сети"
 
-msgid "Start"
-msgstr "Запустить"
+msgid "Status"
+msgstr "Состояние"
 
-msgid "Also sets it to start at boot"
-msgstr "Также включает автозапуск при загрузке"
+msgid "Edit"
+msgstr "Изменить"
+
+msgid "Stop this tunnel and stop it starting at boot"
+msgstr "Остановить этот туннель и отключить его автозапуск"
 
 msgid "Stop"
 msgstr "Остановить"
 
-msgid "Also stops it starting at boot"
-msgstr "Также отключает автозапуск при загрузке"
+msgid "Restart this tunnel without changing boot behaviour"
+msgstr "Перезапустить этот туннель, не меняя автозапуск"
 
 msgid "Restart"
 msgstr "Перезапустить"
 
-msgid "Restarts the daemon without changing boot behaviour"
-msgstr "Перезапускает демон, не меняя автозапуск"
+msgid "General"
+msgstr "Основное"
 
-msgid "Testing..."
-msgstr "Проверка..."
+msgid "Routing"
+msgstr "Маршрутизация"
 
-msgid "Tunnel test failed:"
-msgstr "Тест туннеля не удался:"
+msgid "Advanced"
+msgstr "Дополнительно"
 
-msgid "Check tunnel"
-msgstr "Проверить туннель"
+msgid "Logs"
+msgstr "Журнал"
 
 msgid "Enabled"
 msgstr "Включено"
@@ -122,8 +125,8 @@ msgstr "Запускать при загрузке и запустить сей�
 msgid "Mode"
 msgstr "Режим"
 
-msgid "rawtun creates the TUN interface needed for this router. vpn and socks are the client's other modes."
-msgstr "rawtun создает интерфейс TUN требуемый для роутера. vpn и socks -- другие режимы клиента."
+msgid "rawtun creates the TUN interface this router uses. The client has other modes, which this package does not configure."
+msgstr "rawtun создает интерфейс TUN, который использует этот роутер. У клиента есть и другие режимы, но этот пакет их не настраивает."
 
 msgid "Peer host"
 msgstr "Адрес сервера"
@@ -134,14 +137,20 @@ msgstr "Имя хоста или IP-адрес сервера."
 msgid "Peer port"
 msgstr "Порт сервера"
 
+msgid "UDP port of the server RAW listener, usually 56003."
+msgstr "UDP-порт RAW-слушателя на сервере, обычно 56003."
+
 msgid "Password"
 msgstr "Пароль"
+
+msgid "Connection password, as set on the server."
+msgstr "Пароль подключения, заданный на сервере."
 
 msgid "Device ID"
 msgstr "Идентификатор устройства"
 
-msgid "Identifies this client to the peer. It must be unique: two routers sharing one collide."
-msgstr "Идентифицирует клиент на сервере. Должен быть уникальным: два роутера с одинаковым значением конфликтуют."
+msgid "Identifies this client to the peer. It must be unique: two tunnels sharing one are the same device to the server, and each disconnects the other."
+msgstr "Идентифицирует этот клиент на сервере. Должен быть уникальным: два туннеля с одинаковым идентификатором для сервера - одно устройство, и они отключают друг друга."
 
 msgid "Hashes"
 msgstr "Хеши"
@@ -161,11 +170,41 @@ msgstr "Обращается к VK. Использует сохраненную 
 msgid "Check"
 msgstr "Проверить"
 
+msgid "TUN device"
+msgstr "Устройство TUN"
+
+msgid "Interface the client creates, for example: qwdtt0. Unique per tunnel."
+msgstr "Интерфейс, который создает клиент, например: qwdtt0. Уникальный для каждого туннеля."
+
+msgid "LAN interface"
+msgstr "Интерфейс LAN"
+
+msgid "LAN interface, for example: br-lan."
+msgstr "Интерфейс локальной сети, например: br-lan."
+
+msgid "Firewall mark"
+msgstr "Метка межсетевого экрана"
+
+msgid "Optional. Traffic carrying this mark is routed into this tunnel; set the mark yourself under Network -> Firewall, with target \"mark\", a source zone and destination \"any\". Value or value/mask, hex starting with 0x. Left empty, this tunnel takes everything arriving from the LAN, and only one tunnel may do that."
+msgstr "Необязательно. Трафик с этой меткой направляется в этот туннель; саму метку задайте в разделе Сеть -> Межсетевой экран правилом с целью \"mark\", исходной зоной и назначением \"any\". Значение или значение/маска, шестнадцатеричное - с 0x в начале. Если оставить пустым, туннель забирает весь трафик из локальной сети, и так может делать только один туннель."
+
+msgid "Routing table"
+msgstr "Таблица маршрутизации"
+
+msgid "Table the default route into this tunnel is written to. Unique per tunnel."
+msgstr "Таблица, в которую записывается маршрут по умолчанию через этот туннель. Уникальная для каждого туннеля."
+
+msgid "Rule priority"
+msgstr "Приоритет правила"
+
+msgid "Priority of the ip rule that selects the table above. Unique per tunnel, and lower than the priority of the tunnel without a mark, or that one answers first and this tunnel never sees a packet."
+msgstr "Приоритет правила ip, которое выбирает таблицу выше. Уникальный для каждого туннеля и меньше приоритета туннеля без метки, иначе тот сработает первым и сюда не попадет ни один пакет."
+
 msgid "Workers"
 msgstr "Воркеры"
 
-msgid "Number of parallel sessions."
-msgstr "Количество параллельных сессий."
+msgid "Number of parallel sessions. Every tunnel runs its own, so two tunnels cost twice this."
+msgstr "Число параллельных сессий. У каждого туннеля свои, поэтому два туннеля стоят вдвое дороже."
 
 msgid "DNS"
 msgstr "DNS"
@@ -194,20 +233,32 @@ msgstr "Режим авторизации VK: account или anonymous."
 msgid "VK anonymous path"
 msgstr "Анонимный путь VK"
 
-msgid "TUN device"
-msgstr "Устройство TUN"
-
-msgid "Interface the client creates, for example qwdtt0."
-msgstr "Интерфейс, который создает клиент, например qwdtt0."
-
-msgid "LAN interface"
-msgstr "Интерфейс LAN"
+msgid "Anonymous VK TURN path: vkcalls or legacy."
+msgstr "Путь анонимного доступа к VK TURN: vkcalls или legacy."
 
 msgid "Disable DTLS"
 msgstr "Отключить DTLS"
 
+msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
+msgstr "Прямой режим: RTP-obfs AEAD поверх TURN без DTLS. Сервер должен быть запущен с -listen-direct, иначе туннель не поднимется."
+
 msgid "TURN over TCP"
 msgstr "TURN через TCP"
+
+msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgstr "Подключаться к TURN по TCP вместо UDP. Обходит ограничение UDP в некоторых сетях, например у Ростелекома."
+
+msgid "Collecting data..."
+msgstr "Сбор данных..."
+
+msgid "No status."
+msgstr "Нет данных о состоянии."
+
+msgid "Unable to read status:"
+msgstr "Не удалось получить состояние:"
+
+msgid "Refresh"
+msgstr "Обновить"
 
 msgid "Log is empty"
 msgstr "Журнал пуст"
@@ -215,32 +266,32 @@ msgstr "Журнал пуст"
 msgid "Unable to read the log:"
 msgstr "Не удалось прочитать журнал:"
 
-msgid "Stored in /etc/config/qwdtt. Save & Apply reloads the client."
-msgstr "Хранится в /etc/config/qwdtt."
+msgid "The last 400 lines the system log holds for this tunnel, newest last."
+msgstr "Последние 400 строк системного журнала для этого туннеля, новые снизу."
 
-msgid "Reads the system log (logread -e qwdtt), newest last. Refreshes every 5 seconds."
-msgstr "Читает системный журнал (logread -e qwdtt), новые записи внизу. Обновляется каждые 5 секунд."
+msgid "Service"
+msgstr "Служба"
 
-msgid "Status"
-msgstr "Состояние"
+msgid "Acts on every tunnel at once, leaving the enabled flags as they are."
+msgstr "Действует сразу на все туннели, не меняя флаги включения."
 
-msgid "Settings"
-msgstr "Настройки"
+msgid "Start"
+msgstr "Запустить"
 
-msgid "Logs"
-msgstr "Журнал"
+msgid "Start every tunnel that is enabled"
+msgstr "Запустить все включенные туннели"
 
-msgid "UDP port of the server RAW listener, usually 56003."
-msgstr "UDP-порт RAW-слушателя на сервере, обычно 56003."
+msgid "Stop every tunnel until the next boot or Start"
+msgstr "Остановить все туннели до перезагрузки или запуска"
 
-msgid "Connection password, as set on the server."
-msgstr "Пароль подключения, заданный на сервере."
+msgid "Restart every enabled tunnel"
+msgstr "Перезапустить все включенные туннели"
 
-msgid "Anonymous VK TURN path: vkcalls or legacy."
-msgstr "Путь анонимного доступа к VK TURN: vkcalls или legacy."
+msgid "running"
+msgstr "работает"
 
-msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
-msgstr "Прямой режим: RTP-obfs AEAD поверх TURN без DTLS. Сервер должен быть запущен с -listen-direct, иначе туннель не поднимется."
+msgid "stopped"
+msgstr "остановлен"
 
-msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
-msgstr "Подключаться к TURN по TCP вместо UDP. Обходит ограничение UDP в некоторых сетях, например у Ростелекома."
+msgid "disabled"
+msgstr "выключен"

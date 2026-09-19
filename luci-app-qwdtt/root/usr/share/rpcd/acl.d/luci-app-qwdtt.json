@@ -4,7 +4,8 @@
 		"read": {
 			"cgi-io": [ "exec" ],
 			"ubus": {
-				"file": [ "exec" ]
+				"file": [ "exec" ],
+				"service": [ "list" ]
 			},
 			"file": {
 				"/usr/bin/qwdtt-luci": [ "exec" ]
