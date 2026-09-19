@@ -64,49 +64,52 @@ msgstr ""
 msgid "%s failed: %s"
 msgstr ""
 
-msgid "Collecting data..."
+msgid "One section per tunnel, all running at once. A second tunnel needs its own TUN device and routing table, and a firewall mark to say which traffic it carries: the tunnel without a mark takes everything arriving from the LAN."
 msgstr ""
 
-msgid "No status."
+msgid "Add tunnel"
 msgstr ""
 
-msgid "Unable to read status:"
+msgid "Peer"
 msgstr ""
 
-msgid "Not checked. The test sends pings through the tunnel, so it runs only on request."
+msgid "Carries"
 msgstr ""
 
-msgid "Refreshes every 10 seconds."
+msgid "marked %s"
 msgstr ""
 
-msgid "Actions"
+msgid "everything from the LAN"
 msgstr ""
 
-msgid "Start"
+msgid "Status"
 msgstr ""
 
-msgid "Also sets it to start at boot"
+msgid "Edit"
+msgstr ""
+
+msgid "Stop this tunnel and stop it starting at boot"
 msgstr ""
 
 msgid "Stop"
 msgstr ""
 
-msgid "Also stops it starting at boot"
+msgid "Restart this tunnel without changing boot behaviour"
 msgstr ""
 
 msgid "Restart"
 msgstr ""
 
-msgid "Restarts the daemon without changing boot behaviour"
+msgid "General"
 msgstr ""
 
-msgid "Testing..."
+msgid "Routing"
 msgstr ""
 
-msgid "Tunnel test failed:"
+msgid "Advanced"
 msgstr ""
 
-msgid "Check tunnel"
+msgid "Logs"
 msgstr ""
 
 msgid "Enabled"
@@ -118,7 +121,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-msgid "rawtun creates the TUN interface needed for this router. vpn and socks are the client's other modes."
+msgid "rawtun creates the TUN interface this router uses. The client has other modes, which this package does not configure."
 msgstr ""
 
 msgid "Peer host"
@@ -130,13 +133,19 @@ msgstr ""
 msgid "Peer port"
 msgstr ""
 
+msgid "UDP port of the server RAW listener, usually 56003."
+msgstr ""
+
 msgid "Password"
+msgstr ""
+
+msgid "Connection password, as set on the server."
 msgstr ""
 
 msgid "Device ID"
 msgstr ""
 
-msgid "Identifies this client to the peer. It must be unique: two routers sharing one collide."
+msgid "Identifies this client to the peer. It must be unique: two tunnels sharing one are the same device to the server, and each disconnects the other."
 msgstr ""
 
 msgid "Hashes"
@@ -157,10 +166,40 @@ msgstr ""
 msgid "Check"
 msgstr ""
 
+msgid "TUN device"
+msgstr ""
+
+msgid "Interface the client creates, for example: qwdtt0. Unique per tunnel."
+msgstr ""
+
+msgid "LAN interface"
+msgstr ""
+
+msgid "LAN interface, for example: br-lan."
+msgstr ""
+
+msgid "Firewall mark"
+msgstr ""
+
+msgid "Optional. Traffic carrying this mark is routed into this tunnel; set the mark yourself under Network -> Firewall, with target \"mark\", a source zone and destination \"any\". Value or value/mask, hex starting with 0x. Left empty, this tunnel takes everything arriving from the LAN, and only one tunnel may do that."
+msgstr ""
+
+msgid "Routing table"
+msgstr ""
+
+msgid "Table the default route into this tunnel is written to. Unique per tunnel."
+msgstr ""
+
+msgid "Rule priority"
+msgstr ""
+
+msgid "Priority of the ip rule that selects the table above. Unique per tunnel, and lower than the priority of the tunnel without a mark, or that one answers first and this tunnel never sees a packet."
+msgstr ""
+
 msgid "Workers"
 msgstr ""
 
-msgid "Number of parallel sessions."
+msgid "Number of parallel sessions. Every tunnel runs its own, so two tunnels cost twice this."
 msgstr ""
 
 msgid "DNS"
@@ -190,19 +229,31 @@ msgstr ""
 msgid "VK anonymous path"
 msgstr ""
 
-msgid "TUN device"
-msgstr ""
-
-msgid "Interface the client creates, for example qwdtt0."
-msgstr ""
-
-msgid "LAN interface"
+msgid "Anonymous VK TURN path: vkcalls or legacy."
 msgstr ""
 
 msgid "Disable DTLS"
 msgstr ""
 
+msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
+msgstr ""
+
 msgid "TURN over TCP"
+msgstr ""
+
+msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgstr ""
+
+msgid "Collecting data..."
+msgstr ""
+
+msgid "No status."
+msgstr ""
+
+msgid "Unable to read status:"
+msgstr ""
+
+msgid "Refresh"
 msgstr ""
 
 msgid "Log is empty"
@@ -211,32 +262,32 @@ msgstr ""
 msgid "Unable to read the log:"
 msgstr ""
 
-msgid "Stored in /etc/config/qwdtt. Save & Apply reloads the client."
+msgid "The last 400 lines the system log holds for this tunnel, newest last."
 msgstr ""
 
-msgid "Reads the system log (logread -e qwdtt), newest last. Refreshes every 5 seconds."
+msgid "Service"
 msgstr ""
 
-msgid "Status"
+msgid "Acts on every tunnel at once, leaving the enabled flags as they are."
 msgstr ""
 
-msgid "Settings"
+msgid "Start"
 msgstr ""
 
-msgid "Logs"
+msgid "Start every tunnel that is enabled"
 msgstr ""
 
-msgid "UDP port of the server RAW listener, usually 56003."
+msgid "Stop every tunnel until the next boot or Start"
 msgstr ""
 
-msgid "Connection password, as set on the server."
+msgid "Restart every enabled tunnel"
 msgstr ""
 
-msgid "Anonymous VK TURN path: vkcalls or legacy."
+msgid "running"
 msgstr ""
 
-msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
+msgid "stopped"
 msgstr ""
 
-msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgid "disabled"
 msgstr ""
