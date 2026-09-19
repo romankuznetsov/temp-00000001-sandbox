@@ -20,6 +20,7 @@ TUNS=
 TABLES=
 PRIOS=
 CATCHALL_PRIO=
+CATCHALLS=0
 
 collect() {
 	local cfg="$1"
@@ -36,7 +37,10 @@ collect() {
 	TUNS="$TUNS $tun_name"
 	TABLES="$TABLES $route_table"
 	PRIOS="$PRIOS $rule_priority"
-	[ -n "$fwmark" ] || CATCHALL_PRIO=$rule_priority
+	[ -n "$fwmark" ] || {
+		CATCHALL_PRIO=$rule_priority
+		CATCHALLS=$((CATCHALLS + 1))
+	}
 }
 
 occurrences() {
@@ -103,9 +107,14 @@ start_instance() {
 		logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority is not unique"
 		return 1
 	}
-	# A section without a mark takes everything arriving from the LAN, so its
-	# rule has to be consulted last or it answers for the marked ones too.
-	# Lower number, higher precedence.
+	# A section without a mark takes everything arriving from the LAN, so a
+	# second one of those carries nothing at all.
+	if [ -z "$fwmark" ] && [ "$CATCHALLS" -gt 1 ]; then
+		logger -t qwdtt "qwdtt.$cfg: $CATCHALLS sections have no fwmark, and only one can take everything from the LAN"
+		return 1
+	fi
+	# That section's rule has to be consulted last, or it answers for the
+	# marked ones too. Lower number, higher precedence.
 	if [ -n "$fwmark" ] && [ -n "$CATCHALL_PRIO" ]; then
 		[ "$rule_priority" -lt "$CATCHALL_PRIO" ] || {
 			logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority must be below $CATCHALL_PRIO, the priority of the section that has no fwmark"
