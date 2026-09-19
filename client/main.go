@@ -22,6 +22,14 @@ var CaptchaResultChan = make(chan string, 1)
 
 var captchaModeValue atomic.Value
 
+// Policy routing for RAW TUN mode. Declared here rather than beside the Linux
+// implementation because the stub for every other platform takes it too.
+type rawRoute struct {
+	table    string
+	priority string
+	fwmark   string
+}
+
 func init() {
 	captchaModeValue.Store("auto")
 }
@@ -231,10 +239,19 @@ func main() {
 	lanInterface := flag.String("lan-interface", fileConfig.LANInterface, "OpenWrt LAN interface routed through RAW TUN")
 	rawTunSelfTest := flag.String("rawtun-self-test", "", "create a temporary OpenWrt RAW TUN with this IPv4 address")
 	rawTunSelfTestDuration := flag.Duration("rawtun-self-test-duration", 5*time.Second, "temporary RAW TUN self-test duration")
+	// The defaults are the values this used to hardcode, so a command line
+	// that does not mention them behaves as before. They exist because two
+	// clients on one router cannot share a table: each flushes it on start and
+	// on exit, so the second to start takes the first one's traffic and the
+	// first to stop strands the other.
+	routeTable := flag.String("route-table", "51820", "policy routing table for RAW TUN (Linux/OpenWrt)")
+	rulePriority := flag.String("rule-priority", "10000", "priority of the ip rule that selects that table")
+	routeFwmark := flag.String("route-fwmark", "", "route traffic carrying this fwmark (value or value/mask) instead of everything arriving from -lan-interface")
 
 	flag.Parse()
+	rawRouteOpts := rawRoute{table: *routeTable, priority: *rulePriority, fwmark: *routeFwmark}
 	if *rawTunSelfTest != "" {
-		tun, testErr := createNativeRawTUN(*tunName, *lanInterface, *rawTunSelfTest, 1300)
+		tun, testErr := createNativeRawTUN(*tunName, *lanInterface, *rawTunSelfTest, 1300, rawRouteOpts)
 		if testErr != nil {
 			log.Fatalf("[RAW SELF-TEST] %v", testErr)
 		}
@@ -486,7 +503,7 @@ func main() {
 						cancel()
 						return
 					}
-					nativeTun, nativeErr := createNativeRawTUN(*tunName, *lanInterface, ip, mtu)
+					nativeTun, nativeErr := createNativeRawTUN(*tunName, *lanInterface, ip, mtu, rawRouteOpts)
 					if nativeErr != nil {
 						log.Printf("[RAW] Linux/OpenWrt TUN error: %v", nativeErr)
 						cancel()
