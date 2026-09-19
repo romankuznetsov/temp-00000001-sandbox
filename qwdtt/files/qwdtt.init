@@ -13,14 +13,19 @@ CLIENT=/usr/bin/qwdtt-client
 LINKDIR=/var/run/qwdtt
 
 # Collected over every enabled section before any of them starts. Two tunnels
-# that share a TUN name, a routing table or a rule priority break each other,
-# and the one at fault is not the one that fails: whichever starts second
-# takes the first one's traffic, and whichever stops first strands the other.
+# that share a TUN name, a routing table or a rule priority break each other:
+# whichever starts second takes the first one's traffic, and whichever stops
+# first strands the other.
+#
+# Each value is recorded against the FIRST section that claims it, and a later
+# section claiming the same one is refused. Order in the file decides, so
+# adding a section that collides never disturbs the tunnel that was already
+# running - which is what happens if both are refused instead.
 TUNS=
 TABLES=
 PRIOS=
+CATCHALL=
 CATCHALL_PRIO=
-CATCHALLS=0
 
 collect() {
 	local cfg="$1"
@@ -34,29 +39,33 @@ collect() {
 	config_get rule_priority "$cfg" rule_priority 10000
 	config_get fwmark        "$cfg" fwmark
 
-	TUNS="$TUNS $tun_name"
-	TABLES="$TABLES $route_table"
-	PRIOS="$PRIOS $rule_priority"
-	[ -n "$fwmark" ] || {
+	TUNS="$TUNS $tun_name|$cfg"
+	TABLES="$TABLES $route_table|$cfg"
+	PRIOS="$PRIOS $rule_priority|$cfg"
+	[ -n "$fwmark" ] || [ -n "$CATCHALL" ] || {
+		CATCHALL=$cfg
 		CATCHALL_PRIO=$rule_priority
-		CATCHALLS=$((CATCHALLS + 1))
 	}
 }
 
-occurrences() {
-	local needle="$1" item n=0
+claimed_by() {
+	local needle="$1" entry
 
-	for item in $2; do
-		[ "$item" = "$needle" ] && n=$((n + 1))
+	for entry in $2; do
+		case "$entry" in
+		"$needle|"*)
+			echo "${entry#*|}"
+			return 0
+			;;
+		esac
 	done
-	echo "$n"
 }
 
 start_instance() {
 	local cfg="$1"
 	local enabled mode peer_host peer_port password device_id workers
 	local dns obfs captcha_mode vk_auth vk_anon_path tun_name lan_interface
-	local no_dtls turn_tcp hashes route_table rule_priority fwmark
+	local no_dtls turn_tcp hashes route_table rule_priority fwmark owner
 
 	config_get_bool enabled "$cfg" enabled 0
 	[ "$enabled" -eq 1 ] || return 0
@@ -95,22 +104,25 @@ start_instance() {
 		logger -t qwdtt "qwdtt.$cfg.hash is empty"
 		return 1
 	}
-	[ "$(occurrences "$tun_name" "$TUNS")" -eq 1 ] || {
-		logger -t qwdtt "qwdtt.$cfg: tun_name $tun_name is not unique"
+	owner=$(claimed_by "$tun_name" "$TUNS")
+	[ "$owner" = "$cfg" ] || {
+		logger -t qwdtt "qwdtt.$cfg: tun_name $tun_name is already taken by $owner"
 		return 1
 	}
-	[ "$(occurrences "$route_table" "$TABLES")" -eq 1 ] || {
-		logger -t qwdtt "qwdtt.$cfg: route_table $route_table is not unique"
+	owner=$(claimed_by "$route_table" "$TABLES")
+	[ "$owner" = "$cfg" ] || {
+		logger -t qwdtt "qwdtt.$cfg: route_table $route_table is already taken by $owner"
 		return 1
 	}
-	[ "$(occurrences "$rule_priority" "$PRIOS")" -eq 1 ] || {
-		logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority is not unique"
+	owner=$(claimed_by "$rule_priority" "$PRIOS")
+	[ "$owner" = "$cfg" ] || {
+		logger -t qwdtt "qwdtt.$cfg: rule_priority $rule_priority is already taken by $owner"
 		return 1
 	}
 	# A section without a mark takes everything arriving from the LAN, so a
-	# second one of those carries nothing at all.
-	if [ -z "$fwmark" ] && [ "$CATCHALLS" -gt 1 ]; then
-		logger -t qwdtt "qwdtt.$cfg: $CATCHALLS sections have no fwmark, and only one can take everything from the LAN"
+	# second one of those would carry nothing at all.
+	if [ -z "$fwmark" ] && [ "$CATCHALL" != "$cfg" ]; then
+		logger -t qwdtt "qwdtt.$cfg: $CATCHALL already takes everything from the LAN; set a fwmark"
 		return 1
 	fi
 	# That section's rule has to be consulted last, or it answers for the

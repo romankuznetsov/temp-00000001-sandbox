@@ -99,16 +99,18 @@ reset() {
 	TUNS=
 	TABLES=
 	PRIOS=
+	CATCHALL=
 	CATCHALL_PRIO=
-	CATCHALLS=0
 }
 
 got=$(start_service "" 2>&1)
 want='started: main
    /var/run/qwdtt/qwdtt-main -mode rawtun -peer vpn1.example:56003 -vk aaa,bbb -password p1 -device-id openwrt-main -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls -tun-name qwdtt0 -route-table 51820 -rule-priority 10000
-refused: qwdtt.work: tun_name qwdtt1 is not unique
+started: work
+   /var/run/qwdtt/qwdtt-work -mode rawtun -peer vpn2.example -vk ccc -password p2 -device-id openwrt-work -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls -tun-name qwdtt1 -route-table 51821 -rule-priority 9000
+   -route-fwmark 0x100/0xff00
 refused: qwdtt.late: rule_priority 11000 must be below 10000, the priority of the section that has no fwmark
-refused: qwdtt.twin: tun_name qwdtt1 is not unique
+refused: qwdtt.twin: tun_name qwdtt1 is already taken by work
 refused: qwdtt.noserver.peer_host is not set'
 
 if [ "$got" != "$want" ]; then
@@ -149,8 +151,10 @@ if [ "$got" != 1 ]; then
 	exit 1
 fi
 
-# Neither of two catch-alls runs. Which one was meant is not knowable from the
-# config, and starting either would leave the other quietly carrying nothing.
+# Of two catch-alls the first in the file runs and the second is refused,
+# rather than both being refused: adding a broken section must not take down
+# the tunnel that was already working, which is exactly what happened the first
+# time this was tried on a router.
 CFG_SECTIONS="main spare"
 CFG="$CFG
 spare.enabled=1
@@ -162,10 +166,14 @@ spare.route_table=51824
 spare.rule_priority=9002
 "
 reset
-got=$(start_service "" 2>&1 | grep -c '^started:')
-if [ "$got" != 0 ]; then
-	echo "start_service with two catch-alls started $got instances, expected 0"
-	exit 1
-fi
+got=$(start_service "" 2>&1)
+case $got in
+*'started: main'*) ;;
+*) echo "the first catch-all did not start:"; echo "$got"; exit 1 ;;
+esac
+case $got in
+*'refused: qwdtt.spare: main already takes everything from the LAN'*) ;;
+*) echo "the second catch-all was not refused:"; echo "$got"; exit 1 ;;
+esac
 
 echo "qwdtt.init: ok"
