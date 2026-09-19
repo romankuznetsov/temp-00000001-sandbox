@@ -1,10 +1,12 @@
 #!/bin/sh
 
+# qwdtt+ rather than qwdtt0: every tunnel gets its own device, and firewall4
+# rewrites a trailing + into a wildcard, so one zone covers all of them.
 uci -q batch <<'EOF'
 set firewall.qwdtt=zone
 set firewall.qwdtt.name='qwdtt'
 delete firewall.qwdtt.device
-add_list firewall.qwdtt.device='qwdtt0'
+add_list firewall.qwdtt.device='qwdtt+'
 set firewall.qwdtt.input='REJECT'
 set firewall.qwdtt.output='ACCEPT'
 set firewall.qwdtt.forward='ACCEPT'

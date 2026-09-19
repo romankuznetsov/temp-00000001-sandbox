@@ -1,35 +1,64 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Control script for the qWDTT RAW-IP tunnel. Driven by the LuCI page at
+# Control script for the qWDTT RAW-IP tunnels. Driven by the LuCI page at
 # Services -> qWDTT and useful directly over ssh. A package of its own rather
 # than part of luci-app-qwdtt: a headless router needs it with no web
 # interface installed.
 #
-# The tunnel is a daemon-owned TUN device, not a netifd interface, so the
-# service is what you start and stop. Adding a netifd interface made netifd
-# flush the daemon's address and route.
+# /etc/config/qwdtt holds one section per tunnel and they run at the same time,
+# so almost everything here takes a section. Without -s the verbs act on the
+# service as a whole.
 #
-# Client output goes to the system log; read it with 'logread -e qwdtt'.
+# A tunnel is a daemon-owned TUN device, not a netifd interface, so the service
+# is what you start and stop. Adding a netifd interface made netifd flush the
+# daemon's address and route.
+#
+# Client output goes to the system log, tagged qwdtt-<section> by the init
+# script; read it with 'logread -e qwdtt'.
 
-# Assumed, not provided: /etc/init.d/qwdtt, which start and stop delegate to;
-# qwdtt.main.enabled, which the init script reads to decide whether to start at
-# boot; and table 51820, which the client creates and this only reports.
-RT_TABLE=51820
-# From UCI rather than hardcoded, because the LuCI page reads the same option:
-# hardcoded, setting tun_name made the page report the interface up while this
-# reported it absent.
-TUN=$(uci -q get qwdtt.main.tun_name || :)
-[ -n "$TUN" ] || TUN=qwdtt0
+# Assumed, not provided: /etc/init.d/qwdtt, which start and stop delegate to,
+# and qwdtt.<section>.enabled, which it reads to decide what starts at boot.
 PROBE_HOSTS='8.8.8.8 1.1.1.1'
 PROBE_COUNT=10                  # probes per host; loss matters, not reachability
 PROBE_DEADLINE=4                # seconds; caps the probe against a dead host
 MAX_LOSS=40                     # percent; above this the tunnel cannot carry TCP
+
+usage() {
+	echo "usage: qwdtt [-s section] start | stop | restart | status | brief | tunnel | log [n]" >&2
+	echo "       without -s: every section for reports, the whole service for" >&2
+	echo "       start, stop and restart, leaving the enabled flags alone." >&2
+}
+
+# Section names, in config order. uci restricts them to [A-Za-z0-9_], which is
+# why they can be passed around unquoted and used as jsonfilter path elements.
+sections() {
+	uci -q show qwdtt | sed -n 's/^qwdtt\.\([^.=]*\)=qwdtt$/\1/p'
+}
+
+exists() {
+	[ "$(uci -q get "qwdtt.$1")" = "qwdtt" ]
+}
+
+get() {
+	local value
+	value=$(uci -q get "qwdtt.$1.$2") || :
+	[ -n "$value" ] || value=$3
+	echo "$value"
+}
 
 # virt-shell runs its shell inside 'nsclient', where the tunnel interface does
 # not exist, so the check below would call a healthy tunnel down.
 in_other_netns() {
 	[ -r /proc/1/ns/net ] || return 1
 	[ "$(readlink /proc/self/ns/net 2>/dev/null)" != "$(readlink /proc/1/ns/net 2>/dev/null)" ]
+}
+
+# procd knows which instances it is supervising, and it is the only thing that
+# does: every client process has the same name, so pgrep cannot tell two
+# tunnels apart.
+running() {
+	[ "$(ubus -S call service list '{"name":"qwdtt"}' 2>/dev/null |
+		jsonfilter -q -e "@.qwdtt.instances.$1.running")" = "true" ]
 }
 
 # Loss rather than one packet: with only some workers stale the tunnel still
@@ -39,8 +68,10 @@ in_other_netns() {
 # the default route and never enters the tunnel. -A because BusyBox ping has
 # whole-second intervals only.
 tunnel_ok() {
+	local tun=$1 h loss
+
 	for h in $PROBE_HOSTS; do
-		loss=$(ping -c"$PROBE_COUNT" -A -w"$PROBE_DEADLINE" -I "$TUN" "$h" 2>/dev/null |
+		loss=$(ping -c"$PROBE_COUNT" -A -w"$PROBE_DEADLINE" -I "$tun" "$h" 2>/dev/null |
 			awk '{ for (i = 1; i <= NF; i++) if ($i ~ /%$/) { sub(/%$/, "", $i); print $i; exit } }')
 		loss=${loss%%.*}
 		[ -n "$loss" ] || loss=100
@@ -54,83 +85,132 @@ tunnel_ok() {
 # through `qwdtt brief`. One implementation on purpose: this was once copied
 # into the page's rpcd helper and the two drifted.
 report_static() {
-	echo "enabled:   $(uci -q get qwdtt.main.enabled || echo '?')"
-	if ip link show "$TUN" >/dev/null 2>&1; then
+	local sec=$1 tun table mark ph pp
+
+	tun=$(get "$sec" tun_name qwdtt0)
+	table=$(get "$sec" route_table 51820)
+	mark=$(get "$sec" fwmark '')
+
+	echo "section:   $sec"
+	echo "enabled:   $(get "$sec" enabled '?')"
+	if ip link show "$tun" >/dev/null 2>&1; then
 		# Not `ip -br addr`: its second column is the operational state,
 		# which a userspace TUN reports as "unknown" however well it is
 		# working. carrier is the field that means something here.
-		case "$(cat "/sys/class/net/$TUN/carrier" 2>/dev/null)" in
-		1) echo "interface: $TUN up, carrier ok" ;;
-		0) echo "interface: $TUN present but NO CARRIER" ;;
-		*) echo "interface: $TUN present, carrier not reported" ;;
+		case "$(cat "/sys/class/net/$tun/carrier" 2>/dev/null)" in
+		1) echo "interface: $tun up, carrier ok" ;;
+		0) echo "interface: $tun present but NO CARRIER" ;;
+		*) echo "interface: $tun present, carrier not reported" ;;
 		esac
-		echo "address:   $(ip -4 -o addr show "$TUN" 2>/dev/null | awk '{printf "%s ", $4}')"
-		echo "route:     $(ip route show table "$RT_TABLE" 2>/dev/null | head -1)"
+		echo "address:   $(ip -4 -o addr show "$tun" 2>/dev/null | awk '{printf "%s ", $4}')"
+		echo "route:     $(ip route show table "$table" 2>/dev/null | head -1)"
 	elif in_other_netns; then
 		echo "interface: not visible from this network namespace"
-		echo "           ($TUN lives in the root namespace; the tunnel may be fine)"
+		echo "           ($tun lives in the root namespace; the tunnel may be fine)"
 	else
-		echo "interface: down ($TUN absent)"
+		echo "interface: down ($tun absent)"
 	fi
-	if pgrep -f qwdtt-client >/dev/null 2>&1; then
-		running=yes
+	if [ -n "$mark" ]; then
+		echo "selects:   packets marked $mark"
 	else
-		running=no
+		echo "selects:   everything arriving from the LAN"
 	fi
-	echo "running:   $running"
-	ph=$(uci -q get qwdtt.main.peer_host || :)
-	pp=$(uci -q get qwdtt.main.peer_port || :)
+	if running "$sec"; then
+		echo "running:   yes"
+	else
+		echo "running:   no"
+	fi
+	ph=$(get "$sec" peer_host '')
+	pp=$(get "$sec" peer_port '')
 	echo "peer:      ${ph}${pp:+:$pp}"
-	echo "hashes:    $(uci -q get qwdtt.main.hash | wc -w) configured"
+	echo "hashes:    $(uci -q get "qwdtt.$sec.hash" | wc -w) configured"
 	# The last [STATS] line outlives the process, so a stopped tunnel would
 	# otherwise still show the traffic it carried before it stopped.
-	if [ "$running" = yes ]; then
-		echo "traffic:   $(logread -e qwdtt 2>/dev/null | grep -a 'STATS' | tail -1 | sed 's/.*\[STATS\] //')"
+	if running "$sec"; then
+		echo "traffic:   $(logread -e "qwdtt-$sec" 2>/dev/null | grep -a 'STATS' | tail -1 | sed 's/.*\[STATS\] //')"
 	else
 		echo "traffic:   -"
 	fi
-	echo "log:       logread -e qwdtt"
+	echo "log:       logread -e qwdtt-$sec"
 }
 
 # The end-to-end probe alone, so the page's button can show its result instead
 # of repeating the whole status underneath the copy it already polls.
 report_tunnel() {
-	if tunnel_ok; then
-		echo "tunnel:    ok ($TUNNEL_RESULT)"
+	local sec=$1 tun
+
+	tun=$(get "$sec" tun_name qwdtt0)
+	if tunnel_ok "$tun"; then
+		echo "tunnel:    $sec ok ($TUNNEL_RESULT)"
 	else
-		echo "tunnel:    DEAD ($TUNNEL_RESULT)"
+		echo "tunnel:    $sec DEAD ($TUNNEL_RESULT)"
 	fi
 }
 
+SECTION=
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-s)
+		SECTION=$2
+		[ -n "$SECTION" ] || { usage; exit 2; }
+		exists "$SECTION" || {
+			echo "qwdtt: no section '$SECTION' in /etc/config/qwdtt" >&2
+			exit 2
+		}
+		shift 2 ;;
+	*)
+		break ;;
+	esac
+done
+
+TARGETS=${SECTION:-$(sections)}
+
 case "${1:-status}" in
 start)
-	uci -q set qwdtt.main.enabled='1'; uci -q commit qwdtt
+	# The flag only follows the -s form. Without a section this would enable
+	# every tunnel, including the ones that were disabled on purpose.
+	[ -z "$SECTION" ] || { uci -q set "qwdtt.$SECTION.enabled=1"; uci -q commit qwdtt; }
 	# start, not restart: procd's restart stops first, and stopping an
 	# unregistered service prints a ubus error the page shows as a failure.
-	/etc/init.d/qwdtt start && echo "qwdtt: started (enabled at boot)"
+	# $SECTION unquoted on purpose here and below: empty must pass no
+	# argument at all, which is how the init script is told to take them all.
+	/etc/init.d/qwdtt start $SECTION &&
+		echo "qwdtt: started ${SECTION:-all enabled sections}${SECTION:+ (enabled at boot)}"
 	;;
 stop)
-	uci -q set qwdtt.main.enabled='0'; uci -q commit qwdtt
-	/etc/init.d/qwdtt stop && echo "qwdtt: stopped (disabled at boot)"
+	[ -z "$SECTION" ] || { uci -q set "qwdtt.$SECTION.enabled=0"; uci -q commit qwdtt; }
+	/etc/init.d/qwdtt stop $SECTION &&
+		echo "qwdtt: stopped ${SECTION:-every section}${SECTION:+ (disabled at boot)}"
 	;;
 restart)
-	/etc/init.d/qwdtt restart && echo "qwdtt: restarted"
+	/etc/init.d/qwdtt restart $SECTION &&
+		echo "qwdtt: restarted ${SECTION:-every section}"
 	;;
 status)
-	report_static
-	report_tunnel
-	echo "--- recent log ---"
-	logread -e qwdtt 2>/dev/null | grep -aviE 'STATS|DEBUG' | tail -8
+	for sec in $TARGETS; do
+		report_static "$sec"
+		report_tunnel "$sec"
+		echo "--- recent log ---"
+		logread -e "qwdtt-$sec" 2>/dev/null | grep -aviE 'STATS|DEBUG' | tail -8
+		echo
+	done
 	;;
 brief)
-	report_static ;;
+	for sec in $TARGETS; do
+		report_static "$sec"
+		echo
+	done
+	;;
 tunnel)
-	report_tunnel ;;
+	for sec in $TARGETS; do
+		report_tunnel "$sec"
+	done
+	;;
 log)
-	logread -e qwdtt 2>/dev/null | tail -n "${2:-50}"
+	logread -e "qwdtt${SECTION:+-$SECTION}" 2>/dev/null | tail -n "${2:-50}"
 	;;
 *)
-	echo "usage: qwdtt start | stop | restart | status | brief | tunnel | log [n]" >&2
+	usage
 	exit 1
 	;;
 esac

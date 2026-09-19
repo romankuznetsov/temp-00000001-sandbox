@@ -39,8 +39,10 @@ define Package/qwdtt
   # without.
   #
   # The init script execs /usr/bin/qwdtt-client, so the service is dead
-  # without it.
-  DEPENDS:=+qwdtt-client
+  # without it. ubus and jsonfilter are how the control script asks procd
+  # which tunnel is running: every client process has the same name, so
+  # nothing else can tell two of them apart.
+  DEPENDS:=+qwdtt-client +ubus +jsonfilter
   # POSIX shell only: nothing is compiled, so one build serves every target.
   PKGARCH:=all
 endef
