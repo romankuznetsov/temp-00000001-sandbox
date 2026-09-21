@@ -14,17 +14,21 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const openWrtRouteTable = "51820"
-
-var interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.:-]+$`)
+var (
+	interfaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.:-]+$`)
+	routeNumberPattern   = regexp.MustCompile(`^[0-9]+$`)
+	// Value or value/mask, decimal or hex, which is what `ip rule` accepts.
+	fwmarkPattern = regexp.MustCompile(`^(0[xX][0-9a-fA-F]+|[0-9]+)(/(0[xX][0-9a-fA-F]+|[0-9]+))?$`)
+)
 
 type nativeRawTUN struct {
 	file         *os.File
 	name         string
 	lanInterface string
+	route        rawRoute
 }
 
-func createNativeRawTUN(name, lanInterface, address string, mtu int) (*nativeRawTUN, error) {
+func createNativeRawTUN(name, lanInterface, address string, mtu int, route rawRoute) (*nativeRawTUN, error) {
 	if name == "" {
 		name = "qwdtt0"
 	}
@@ -33,6 +37,15 @@ func createNativeRawTUN(name, lanInterface, address string, mtu int) (*nativeRaw
 	}
 	if !validInterfaceName(name) || !validInterfaceName(lanInterface) {
 		return nil, fmt.Errorf("invalid interface name")
+	}
+	if !routeNumberPattern.MatchString(route.table) {
+		return nil, fmt.Errorf("invalid route table %q", route.table)
+	}
+	if !routeNumberPattern.MatchString(route.priority) {
+		return nil, fmt.Errorf("invalid rule priority %q", route.priority)
+	}
+	if route.fwmark != "" && !fwmarkPattern.MatchString(route.fwmark) {
+		return nil, fmt.Errorf("invalid fwmark %q", route.fwmark)
 	}
 	ip := net.ParseIP(address).To4()
 	if ip == nil {
@@ -56,6 +69,20 @@ func createNativeRawTUN(name, lanInterface, address string, mtu int) (*nativeRaw
 		unix.Close(fd)
 		return nil, fmt.Errorf("TUNSETIFF: %w", err)
 	}
+	// The device outlives this process, and TUNSETIFF attaches to it again on
+	// the next start. Without that every restart destroys it, and a new one
+	// gets a new interface index: a socket bound to the tunnel with
+	// SO_BINDTODEVICE - curl --interface, iperf3 --bind-dev - then points at
+	// an index that no longer exists and can never send again.
+	//
+	// It also means traffic routed into the tunnel is dropped while nothing is
+	// attached, rather than falling back to the WAN. That is deliberate. What
+	// takes the device down again is stopping the tunnel, which is the one
+	// case where leaving the LAN without a route would be wrong.
+	if err := unix.IoctlSetInt(fd, unix.TUNSETPERSIST, 1); err != nil {
+		unix.Close(fd)
+		return nil, fmt.Errorf("TUNSETPERSIST: %w", err)
+	}
 	if err := unix.SetNonblock(fd, false); err != nil {
 		unix.Close(fd)
 		return nil, fmt.Errorf("set blocking TUN: %w", err)
@@ -65,6 +92,7 @@ func createNativeRawTUN(name, lanInterface, address string, mtu int) (*nativeRaw
 		file:         os.NewFile(uintptr(fd), "/dev/net/tun"),
 		name:         name,
 		lanInterface: lanInterface,
+		route:        route,
 	}
 	if err := t.configure(address, mtu); err != nil {
 		t.file.Close()
@@ -87,12 +115,13 @@ func (t *nativeRawTUN) configure(address string, mtu int) error {
 			return err
 		}
 	}
-	_ = runNativeCommand("ip", "route", "flush", "table", openWrtRouteTable)
-	if err := runNativeCommand("ip", "route", "replace", "default", "dev", t.name, "table", openWrtRouteTable); err != nil {
+	_ = runNativeCommand("ip", "route", "flush", "table", t.route.table)
+	if err := runNativeCommand("ip", "route", "replace", "default", "dev", t.name, "table", t.route.table); err != nil {
 		return err
 	}
-	_ = runNativeCommand("ip", "rule", "del", "iif", t.lanInterface, "lookup", openWrtRouteTable, "priority", "10000")
-	if err := runNativeCommand("ip", "rule", "add", "iif", t.lanInterface, "lookup", openWrtRouteTable, "priority", "10000"); err != nil {
+	rule := t.ruleSelector()
+	_ = runNativeCommand(append([]string{"ip", "rule", "del"}, rule...)...)
+	if err := runNativeCommand(append([]string{"ip", "rule", "add"}, rule...)...); err != nil {
 		return err
 	}
 	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0644); err != nil {
@@ -101,10 +130,33 @@ func (t *nativeRawTUN) configure(address string, mtu int) error {
 	return nil
 }
 
+// Which traffic this tunnel takes. With a mark configured the LAN rule is not
+// added as well: both rules would sit at the same priority, and a second
+// tunnel would then never see a packet, because the first one's iif rule
+// already matches everything arriving from the LAN.
+func (t *nativeRawTUN) ruleSelector() []string {
+	if t.route.fwmark != "" {
+		return []string{"fwmark", t.route.fwmark, "lookup", t.route.table, "priority", t.route.priority}
+	}
+	return []string{"iif", t.lanInterface, "lookup", t.route.table, "priority", t.route.priority}
+}
+
+// Detaching only. The device, its address, its table and its rule stay behind
+// on purpose - see TUNSETPERSIST above - so the next client attaches to the
+// same interface index and traffic routed into the tunnel is held rather than
+// released to the WAN. Taking the tunnel down is `qwdtt stop`, which removes
+// the device and its routes with it.
 func (t *nativeRawTUN) cleanup() {
 	_ = t.file.Close()
-	_ = runNativeCommand("ip", "rule", "del", "iif", t.lanInterface, "lookup", openWrtRouteTable, "priority", "10000")
-	_ = runNativeCommand("ip", "route", "flush", "table", openWrtRouteTable)
+}
+
+// Everything cleanup deliberately leaves. Only the self-test wants this: it
+// creates a tunnel nobody asked for and has to leave the router as it found it.
+func (t *nativeRawTUN) destroy() {
+	t.cleanup()
+	rule := t.ruleSelector()
+	_ = runNativeCommand(append([]string{"ip", "rule", "del"}, rule...)...)
+	_ = runNativeCommand("ip", "route", "flush", "table", t.route.table)
 	_ = runNativeCommand("ip", "link", "del", t.name)
 }
 
