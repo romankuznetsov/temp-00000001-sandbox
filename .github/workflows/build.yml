@@ -205,6 +205,12 @@ jobs:
         working-directory: client
         run: go test -tags=openwrt ./...
 
+      # The init script decides which tunnels may run together, and every way
+      # it can be wrong is quiet. Nothing else here runs shell from the
+      # packages, so this is where it goes.
+      - name: qwdtt init script
+        run: sh qwdtt/tests/init.sh
+
   client:
     name: client ${{ matrix.name }}
     needs: [changes, check]

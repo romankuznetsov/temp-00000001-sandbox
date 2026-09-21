@@ -1,0 +1,37 @@
+#!/bin/sh
+# The TUN device used to be an option and is the section name now, so a config
+# written before that has to be renamed rather than reinterpreted: leaving
+# qwdtt.main with tun_name qwdtt0 alone would silently create a device called
+# main, which the firewall zone - it matches qwdtt+ - would not cover.
+#
+# Idempotent by construction: a config with no tun_name anywhere is untouched,
+# which is every config written after this.
+
+changed=0
+
+for sec in $(uci -q show qwdtt | sed -n 's/^qwdtt\.\([^.=]*\)=qwdtt$/\1/p'); do
+	tun=$(uci -q get "qwdtt.$sec.tun_name") || continue
+	[ -n "$tun" ] || continue
+
+	if [ "$tun" != "$sec" ]; then
+		# A name already in use is left alone rather than merged: the device
+		# then follows the section name, which is the new rule anyway.
+		if [ -n "$(uci -q get "qwdtt.$tun")" ]; then
+			logger -t qwdtt "qwdtt.$sec: cannot take the name $tun, it is already a section; the device is now $sec"
+		elif uci -q rename "qwdtt.$sec=$tun"; then
+			logger -t qwdtt "qwdtt.$sec is now qwdtt.$tun, after the device it creates"
+			sec=$tun
+		fi
+	fi
+
+	uci -q delete "qwdtt.$sec.tun_name"
+	changed=1
+done
+
+[ "$changed" = 1 ] || exit 0
+
+uci commit qwdtt
+# Renaming a section renames its procd instance, so what is running no longer
+# matches what is configured.
+[ ! -x /usr/bin/qwdtt ] || /usr/bin/qwdtt restart >/dev/null 2>&1
+exit 0

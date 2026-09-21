@@ -5,12 +5,13 @@
 # keeping the state-changing verbs here lets the ACL put them under "write"
 # while status and logs stay readable under "read".
 #
-# The verb list is enforced here, not in the ACL. Passing arbitrary arguments
-# through to qwdtt would hand the browser every subcommand it has.
+# The verb list is enforced here, not in the ACL, and the section name is
+# checked against /etc/config/qwdtt before it is passed on. Passing arbitrary
+# arguments through to qwdtt would hand the browser every subcommand it has.
 #
-# Note start/stop are not just runtime: qwdtt writes qwdtt.main.enabled, so
-# they change whether the tunnel comes back after a reboot. The page says so on
-# the buttons.
+# Runtime only: none of these writes a section's enabled flag, so a tunnel
+# stopped here comes back after a reboot. That flag is a setting like any
+# other and is edited in the page's form.
 
 set -eu
 
@@ -28,11 +29,23 @@ require_ctl() {
 	}
 }
 
-case "${1:-}" in
-start|stop|restart)
+VERB=${1:-}
+SEC=${2:-}
+SEL=
+if [ -n "$SEC" ]; then
+	[ "$(uci -q get "qwdtt.$SEC" || :)" = "qwdtt" ] || {
+		echo "no section '$SEC' in /etc/config/qwdtt" >&2
+		exit 4
+	}
+	SEL="-s $SEC"
+fi
+
+case "$VERB" in
+start | stop | restart)
 	require_ctl
-	exec "$CTL" "$1" ;;
+	# Unquoted on purpose: empty must pass no argument at all.
+	exec "$CTL" $SEL "$VERB" ;;
 *)
-	echo "usage: qwdtt-luci-act start|stop|restart" >&2
+	echo "usage: qwdtt-luci-act start|stop|restart [section]" >&2
 	exit 2 ;;
 esac

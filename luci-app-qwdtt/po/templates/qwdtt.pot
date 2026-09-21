@@ -49,10 +49,43 @@ msgstr ""
 msgid "Check failed:"
 msgstr ""
 
-msgid "%s failed (exit %d)"
+msgid "exit %d"
 msgstr ""
 
-msgid "Done."
+msgid "Uptime"
+msgstr ""
+
+msgid "MAC"
+msgstr ""
+
+msgid "RX"
+msgstr ""
+
+msgid "Pkts."
+msgstr ""
+
+msgid "TX"
+msgstr ""
+
+msgid "IPv4"
+msgstr ""
+
+msgid "connecting"
+msgstr ""
+
+msgid "Information"
+msgstr ""
+
+msgid "Interface disabled"
+msgstr ""
+
+msgid "stopped"
+msgstr ""
+
+msgid "Error"
+msgstr ""
+
+msgid "%s failed (exit %d)"
 msgstr ""
 
 msgid "qWDTT"
@@ -64,52 +97,82 @@ msgstr ""
 msgid "%s failed: %s"
 msgstr ""
 
-msgid "Collecting data..."
+msgid "Status"
 msgstr ""
 
-msgid "No status."
+msgid "Enabled"
 msgstr ""
 
-msgid "Unable to read status:"
+msgid "yes"
 msgstr ""
 
-msgid "Not checked. The test sends pings through the tunnel, so it runs only on request."
+msgid "no"
 msgstr ""
 
-msgid "Refreshes every 10 seconds."
+msgid "One tunnel per section, all running at once. The name is the TUN device the tunnel creates. A second tunnel needs its own routing table and a firewall mark to say which traffic it carries: the tunnel without a mark takes everything arriving from the LAN."
 msgstr ""
 
-msgid "Actions"
+msgid "Add tunnel..."
 msgstr ""
 
-msgid "Start"
+msgid "Tunnel"
 msgstr ""
 
-msgid "Also sets it to start at boot"
+msgid "Peer"
 msgstr ""
 
-msgid "Stop"
+msgid "Edit"
 msgstr ""
 
-msgid "Also stops it starting at boot"
+msgid "Restart this tunnel"
 msgstr ""
 
 msgid "Restart"
 msgstr ""
 
-msgid "Restarts the daemon without changing boot behaviour"
+msgid "Stop this tunnel until it is started again or the router reboots"
 msgstr ""
 
-msgid "Testing..."
+msgid "Stop"
 msgstr ""
 
-msgid "Tunnel test failed:"
+msgid "Name"
 msgstr ""
 
-msgid "Check tunnel"
+msgid "New tunnel name"
 msgstr ""
 
-msgid "Enabled"
+msgid "Also the name of the TUN device this tunnel creates, so at most 15 characters. Keep the qwdtt prefix and the firewall zone covers it: the zone matches qwdtt+, and any other name has to be added to it by hand."
+msgstr ""
+
+msgid "That name is already taken"
+msgstr ""
+
+msgid "That name is too long for an interface"
+msgstr ""
+
+msgid "Add tunnel"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Loading data..."
+msgstr ""
+
+msgid "Create tunnel"
+msgstr ""
+
+msgid "General"
+msgstr ""
+
+msgid "Advanced"
+msgstr ""
+
+msgid "Routing"
+msgstr ""
+
+msgid "Logs"
 msgstr ""
 
 msgid "Start at boot and run now."
@@ -118,7 +181,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-msgid "rawtun creates the TUN interface needed for this router. vpn and socks are the client's other modes."
+msgid "rawtun creates the TUN interface this router uses. The client has other modes, which this package does not configure."
 msgstr ""
 
 msgid "Peer host"
@@ -130,13 +193,19 @@ msgstr ""
 msgid "Peer port"
 msgstr ""
 
+msgid "UDP port of the server RAW listener, usually 56003."
+msgstr ""
+
 msgid "Password"
+msgstr ""
+
+msgid "Connection password, as set on the server."
 msgstr ""
 
 msgid "Device ID"
 msgstr ""
 
-msgid "Identifies this client to the peer. It must be unique: two routers sharing one collide."
+msgid "Identifies this client to the peer. It must be unique: two tunnels sharing one are the same device to the server, and each disconnects the other."
 msgstr ""
 
 msgid "Hashes"
@@ -157,10 +226,46 @@ msgstr ""
 msgid "Check"
 msgstr ""
 
+msgid "LAN interface"
+msgstr ""
+
+msgid "LAN interface, for example: br-lan."
+msgstr ""
+
+msgid "Firewall mark"
+msgstr ""
+
+msgid "Optional. Traffic carrying this mark is routed into this tunnel; set the mark yourself under Network -> Firewall, with target \"mark\", a source zone and destination \"any\". Value or value/mask, hex starting with 0x. Left empty, this tunnel takes everything arriving from the LAN, and only one tunnel may do that."
+msgstr ""
+
+msgid "%s already takes everything arriving from the LAN, so this tunnel needs a mark"
+msgstr ""
+
+msgid "Routing table"
+msgstr ""
+
+msgid "Table the default route into this tunnel is written to. Unique per tunnel."
+msgstr ""
+
+msgid "Table %s is already used by %s"
+msgstr ""
+
+msgid "Rule priority"
+msgstr ""
+
+msgid "Priority of the ip rule that selects the table above. Unique per tunnel, and lower than the priority of the tunnel without a mark, or that one answers first and this tunnel never sees a packet."
+msgstr ""
+
+msgid "Priority %s is already used by %s"
+msgstr ""
+
+msgid "Must be below %d, the priority of %s, which has no mark"
+msgstr ""
+
 msgid "Workers"
 msgstr ""
 
-msgid "Number of parallel sessions."
+msgid "Number of parallel sessions. Every tunnel runs its own, so two tunnels cost twice this."
 msgstr ""
 
 msgid "DNS"
@@ -190,19 +295,22 @@ msgstr ""
 msgid "VK anonymous path"
 msgstr ""
 
-msgid "TUN device"
-msgstr ""
-
-msgid "Interface the client creates, for example qwdtt0."
-msgstr ""
-
-msgid "LAN interface"
+msgid "Anonymous VK TURN path: vkcalls or legacy."
 msgstr ""
 
 msgid "Disable DTLS"
 msgstr ""
 
+msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
+msgstr ""
+
 msgid "TURN over TCP"
+msgstr ""
+
+msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgstr ""
+
+msgid "Collecting data..."
 msgstr ""
 
 msgid "Log is empty"
@@ -211,32 +319,8 @@ msgstr ""
 msgid "Unable to read the log:"
 msgstr ""
 
-msgid "Stored in /etc/config/qwdtt. Save & Apply reloads the client."
+msgid "The last 400 lines the system log holds for this tunnel, newest last."
 msgstr ""
 
-msgid "Reads the system log (logread -e qwdtt), newest last. Refreshes every 5 seconds."
-msgstr ""
-
-msgid "Status"
-msgstr ""
-
-msgid "Settings"
-msgstr ""
-
-msgid "Logs"
-msgstr ""
-
-msgid "UDP port of the server RAW listener, usually 56003."
-msgstr ""
-
-msgid "Connection password, as set on the server."
-msgstr ""
-
-msgid "Anonymous VK TURN path: vkcalls or legacy."
-msgstr ""
-
-msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
-msgstr ""
-
-msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgid "Refresh"
 msgstr ""
