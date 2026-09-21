@@ -193,19 +193,24 @@ post_install_hint() {
 	cat <<'EOF'
 
 Next steps
-  1. Set the peer, password and call hashes -- in LuCI (Services -> qWDTT ->
-     Settings), or over UCI:
+  1. Set the peer, password and call hashes of the tunnel that shipped, which
+     is the section called qwdtt0 -- the section name is the TUN device it
+     creates. In LuCI (Services -> qWDTT), or over UCI:
 
-       uci set qwdtt.main.peer_host='SERVER_IP'
-       uci set qwdtt.main.peer_port='56003'
-       uci set qwdtt.main.password='CONNECTION_PASSWORD'
-       uci add_list qwdtt.main.hash='VK_CALL_HASH'
+       uci set qwdtt.qwdtt0.peer_host='SERVER_IP'
+       uci set qwdtt.qwdtt0.peer_port='56003'
+       uci set qwdtt.qwdtt0.password='CONNECTION_PASSWORD'
+       uci add_list qwdtt.qwdtt0.hash='VK_CALL_HASH'
+       uci set qwdtt.qwdtt0.enabled='1'
        uci commit qwdtt
 
   2. Enable at boot and start now:
 
        /etc/init.d/qwdtt enable
-       /usr/bin/qwdtt start
+       /usr/bin/qwdtt -s qwdtt0 start
+
+  A second tunnel is another section, with its own route_table, rule_priority
+  and fwmark.
 
   The password and hashes are secrets -- do not publish or share them.
 EOF

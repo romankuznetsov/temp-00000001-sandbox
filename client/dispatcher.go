@@ -87,8 +87,6 @@ type WorkerSlot struct {
 }
 
 type Dispatcher struct {
-	tunReadCount    uint64
-	tunSentCount    uint64
 	tunDroppedCount uint64
 
 	localConn     net.PacketConn
@@ -257,14 +255,6 @@ func (d *Dispatcher) readLoop() {
 		}
 		d.stats.TotalBytesUp.Add(int64(n))
 
-		if d.tunFile != nil {
-			c := atomic.AddUint64(&d.tunReadCount, 1)
-			if c%200 == 0 {
-				rawDiagf("readLoop: read from TUN=%d sent=%d dropped=%d",
-					c, atomic.LoadUint64(&d.tunSentCount), atomic.LoadUint64(&d.tunDroppedCount))
-			}
-		}
-
 		if atomic.CompareAndSwapUint32(&d.firstPktUp, 0, 1) {
 			if d.tunFile != nil {
 				log.Printf("[DISP] [DEBUG] Received the FIRST packet from the TUN (%d bytes)", n)
@@ -319,9 +309,6 @@ func (d *Dispatcher) readLoop() {
 				}
 			}
 			if sentPrio {
-				if d.tunFile != nil {
-					atomic.AddUint64(&d.tunSentCount, 1)
-				}
 				d.mu.Unlock()
 				continue
 			}
@@ -372,11 +359,7 @@ func (d *Dispatcher) readLoop() {
 			}
 		}
 
-		if sent {
-			if d.tunFile != nil {
-				atomic.AddUint64(&d.tunSentCount, 1)
-			}
-		} else {
+		if !sent {
 			// Every worker is overloaded - advance the pointer, the packet is dropped
 			d.rrIndex = (idx + 1) % nw
 			d.rrCount = 0

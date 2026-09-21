@@ -8,10 +8,15 @@
 # effectively hold every subcommand it has. Everything reachable from the
 # browser is therefore exactly what this case statement allows.
 #
+# The section name is the one argument that comes from the page, so it is
+# checked against the sections that exist in /etc/config/qwdtt before it is
+# used, and anything else is refused. uci section names are [A-Za-z0-9_], so a
+# name that passes that check cannot be an option to qwdtt either.
+#
 # This half is read-only and is granted under the ACL's "read" scope. Anything
 # that changes state lives in qwdtt-luci-act, granted under "write", because
 # rpcd whitelists a path rather than a verb -- one script for both would let a
-# read-only LuCI account stop the tunnel.
+# read-only LuCI account stop a tunnel.
 #
 # Every reading verb delegates to qwdtt rather than reimplementing it. An
 # earlier revision computed the status fields here so the page would still work
@@ -41,14 +46,37 @@ require_ctl() {
 	}
 }
 
-case "${1:-}" in
-status)  require_ctl; exec "$CTL" brief ;;
-tunnel)  require_ctl; exec "$CTL" tunnel ;;
+require_section() {
+	[ -n "$SEC" ] || {
+		echo "a qwdtt section is required" >&2
+		exit 4
+	}
+}
+
+VERB=${1:-}
+SEC=${2:-}
+# Expands to nothing at all when no section was given, which is how qwdtt is
+# told to report on every one of them.
+SEL=
+if [ -n "$SEC" ]; then
+	[ "$(uci -q get "qwdtt.$SEC" || :)" = "qwdtt" ] || {
+		echo "no section '$SEC' in /etc/config/qwdtt" >&2
+		exit 4
+	}
+	SEL="-s $SEC"
+fi
+
+case "$VERB" in
+# What the table polls: the same facts 'qwdtt brief' prints, for every section
+# at once and as JSON, so the page reads values rather than parsing prose.
+runtime) require_ctl; exec "$CTL" $SEL runtime ;;
+tunnel)  require_ctl; exec "$CTL" $SEL tunnel ;;
 # Asks VK whether each configured hash still resolves to a TURN allocation.
 # Network-bound and slow -- seconds per hash -- so it is on demand only, never
 # polled. The client exits after the checks; -check-hashes returns before
 # -peer or -password are required, so neither is passed.
 check-hashes)
+	require_section
 	[ -x "$CLIENT" ] || {
 		echo "$CLIENT is missing. luci-app-qwdtt does not ship the client:" >&2
 		echo "install or deploy qWDTT, then retry." >&2
@@ -56,20 +84,20 @@ check-hashes)
 	}
 	# UCI list values arrive space-separated; the client wants one comma
 	# separated -vk value and reduces links to hashes itself.
-	hashes=$(uci -q get qwdtt.main.hash | tr -s ' ' ',' | sed -e 's/^,//' -e 's/,$//')
-	[ -n "$hashes" ] || { echo "no hashes are configured" >&2; exit 4; }
+	hashes=$(uci -q get "qwdtt.$SEC.hash" | tr -s ' ' ',' | sed -e 's/^,//' -e 's/,$//')
+	[ -n "$hashes" ] || { echo "no hashes are configured in $SEC" >&2; exit 4; }
 	# The auth mode changes how a hash is resolved, so pass what is configured
 	# rather than letting the client fall back to its own defaults.
 	exec "$CLIENT" -check-hashes -vk "$hashes" \
-		-vk-auth "$(uci -q get qwdtt.main.vk_auth || echo anonymous)" \
-		-vk-anon-path "$(uci -q get qwdtt.main.vk_anon_path || echo vkcalls)" \
-		-captcha-mode "$(uci -q get qwdtt.main.captcha_mode || echo auto)" 2>&1 ;;
+		-vk-auth "$(uci -q get "qwdtt.$SEC.vk_auth" || echo anonymous)" \
+		-vk-anon-path "$(uci -q get "qwdtt.$SEC.vk_anon_path" || echo vkcalls)" \
+		-captcha-mode "$(uci -q get "qwdtt.$SEC.captcha_mode" || echo auto)" 2>&1 ;;
 # Folded in from a separate qwdtt-log-tail script, which existed to be a fixed
 # argument list for the ACL to whitelist -- but the ACL only ever named this
 # script, which exec'd it, so it bought nothing and hardcoded the log path a
 # second time. The line count is the fixed argument list.
-log)     require_ctl; exec "$CTL" log 400 ;;
+log)     require_ctl; exec "$CTL" $SEL log 400 ;;
 *)
-	echo "usage: qwdtt-luci status|tunnel|log|check-hashes" >&2
+	echo "usage: qwdtt-luci runtime|tunnel|log|check-hashes [section]" >&2
 	exit 2 ;;
 esac
