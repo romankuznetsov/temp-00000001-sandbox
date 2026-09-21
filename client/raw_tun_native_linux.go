@@ -119,9 +119,20 @@ func (t *nativeRawTUN) configure(address string, mtu int) error {
 	if err := runNativeCommand("ip", "route", "replace", "default", "dev", t.name, "table", t.route.table); err != nil {
 		return err
 	}
-	rule := t.ruleSelector()
-	_ = runNativeCommand(append([]string{"ip", "rule", "del"}, rule...)...)
-	if err := runNativeCommand(append([]string{"ip", "rule", "add"}, rule...)...); err != nil {
+	// Every rule at this tunnel's priority, not only the one this configuration
+	// would add. Deleting by selector leaves the previous one behind whenever
+	// the selector changes: correcting lan_interface on a router left
+	// `iif <old> lookup 51820` sitting next to `iif br-lan lookup 51820` at the
+	// same priority, and a changed fwmark would have kept routing the old mark
+	// into this table. The priority is this tunnel's own - the init script
+	// refuses two sections that share one - so nothing else owns that slot.
+	// Bounded, because `ip rule del` reports success once per rule removed.
+	for i := 0; i < 8; i++ {
+		if runNativeCommand("ip", "rule", "del", "priority", t.route.priority) != nil {
+			break
+		}
+	}
+	if err := runNativeCommand(append([]string{"ip", "rule", "add"}, t.ruleSelector()...)...); err != nil {
 		return err
 	}
 	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0644); err != nil {
