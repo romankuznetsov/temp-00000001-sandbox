@@ -294,6 +294,28 @@ function dropLanRouting(section_id) {
 	});
 }
 
+/* ---- what the interface says when it will not come up --------------------
+   netifd carries a code, and Network -> Interfaces prints "Unknown error
+   (CODE)" for anything it has not been told about. The first five are the
+   protocol handler refusing a configuration it can read; the rest are the
+   client reporting an answer from the server that reconnecting will not
+   change. Both reach the same place, which is the one the operator is looking
+   at when a tunnel is down. */
+[
+	[ 'MISSING_PEER_HOST',      _('No server address is set') ],
+	[ 'MISSING_HASH',           _('No VK call hash is set') ],
+	[ 'NAME_TOO_LONG',          _('The interface name is longer than the 15 characters a TUN device may have') ],
+	[ 'MISSING_IP4TABLE',       _('No routing table is set, and the tunnel cannot use the main one: its default route would carry the client\'s own traffic to VK') ],
+	[ 'DUPLICATE_DEVICE_ID',    _('Another qWDTT interface already uses this device ID') ],
+	[ 'QWDTT_WRONG_PASSWORD',   _('The server rejected the connection password') ],
+	[ 'QWDTT_PASSWORD_EXPIRED', _('The connection password has expired') ],
+	[ 'QWDTT_DEVICE_MISMATCH',  _('The connection password belongs to another device ID. One password is bound to one device, so a second router needs its own.') ],
+	[ 'QWDTT_AUTH_FAILED',      _('The server refused this tunnel. Check the password and the device ID.') ],
+	[ 'QWDTT_HASH_DEAD',        _('The VK call behind this hash is closed. Replace the hash.') ]
+].forEach(function(e) {
+	network.registerErrorCode(e[0], e[1]);
+});
+
 return network.registerProtocol('qwdtt', {
 	getI18n: function() {
 		return _('qWDTT');

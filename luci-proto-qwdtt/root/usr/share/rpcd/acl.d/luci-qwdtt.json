@@ -3,7 +3,7 @@
 		"description": "Grant access to the qWDTT status page",
 		"read": {
 			"ubus": {
-				"luci.qwdtt": [ "getLog" ]
+				"luci.qwdtt": [ "getLog", "getBaselines" ]
 			},
 			"uci": [ "network" ]
 		},

@@ -239,6 +239,7 @@ func main() {
 	// local.
 	if *netifd {
 		log.SetFlags(0)
+		netifdManaged = true
 	}
 	if *rawTunSelfTest != "" {
 		tun, testErr := createNativeRawTUN(*tunName)

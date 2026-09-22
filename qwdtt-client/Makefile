@@ -61,6 +61,7 @@ define Package/qwdtt-client/install
 	$(INSTALL_DIR) $(1)/lib/netifd/proto
 	$(INSTALL_BIN) ./files/qwdtt.sh $(1)/lib/netifd/proto/qwdtt.sh
 	$(INSTALL_BIN) ./files/qwdtt-up.sh $(1)/lib/netifd/qwdtt-up.sh
+	$(INSTALL_BIN) ./files/qwdtt-error.sh $(1)/lib/netifd/qwdtt-error.sh
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	# Before the firewall one, so the zone's network list sees the interfaces
 	# the conversion has just written.

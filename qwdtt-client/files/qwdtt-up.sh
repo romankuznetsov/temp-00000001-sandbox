@@ -32,4 +32,14 @@ if [ "$peerdns" = 1 ]; then
 	done
 fi
 
+# The device outlives the interface, so its counters carry on across a restart
+# while netifd starts the uptime again from this update - the two then describe
+# different spans and read as a contradiction. Recording the counters at the
+# same moment is what lets the status page show both since the same instant.
+mkdir -p /var/run/qwdtt
+stats="/sys/class/net/$DEVICE/statistics"
+echo "$(cat "$stats/rx_bytes") $(cat "$stats/rx_packets")" \
+     "$(cat "$stats/tx_bytes") $(cat "$stats/tx_packets")" \
+	> "/var/run/qwdtt/$INTERFACE.counters"
+
 proto_send_update "$INTERFACE"

@@ -50,3 +50,27 @@ func hasEnv(env []string, want string) bool {
 	}
 	return false
 }
+
+// The point is which refusal is reported, not that one is: an operator reading
+// "Unknown error (FATAL_AUTH)" on the interface learns nothing they could act
+// on, and the three password refusals need three different corrections.
+func TestNetifdErrorCode(t *testing.T) {
+	tests := []struct {
+		message string
+		want    string
+	}{
+		{"FATAL_AUTH: the password is bound to another device", "QWDTT_DEVICE_MISMATCH"},
+		{"FATAL_AUTH: the password has expired", "QWDTT_PASSWORD_EXPIRED"},
+		{"FATAL_AUTH: wrong connection password", "QWDTT_WRONG_PASSWORD"},
+		{"FATAL_AUTH: access denied (banned)", "QWDTT_AUTH_FAILED"},
+		{"хеш мёртв", "QWDTT_HASH_DEAD"},
+		{"TURN Allocate: error 401", ""},
+		{"", ""},
+	}
+
+	for _, tc := range tests {
+		if got := netifdErrorCode(tc.message); got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.message, got, tc.want)
+		}
+	}
+}

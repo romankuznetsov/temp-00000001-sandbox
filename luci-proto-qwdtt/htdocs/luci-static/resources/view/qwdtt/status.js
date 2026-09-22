@@ -6,11 +6,11 @@
 'require rpc';
 'require network';
 
-/* Status -> qWDTT. Everything in the table comes off the interface, because
-   netifd owns it now: the client's own counters in client/stats.go are no
-   longer the only source, and the ones netifd keeps are free and agree with
-   what Network -> Interfaces shows. What is not free is the log, which is the
-   one call to the backend. */
+/* Status -> qWDTT. Most of the table comes off the interface, because netifd
+   owns it now and the counters it keeps are free. Two things are not free: the
+   log, and where each tunnel's counters stood when it last came up - the TUN
+   device outlives the interface on purpose, so its totals would otherwise be
+   shown against an uptime that starts at the restart. */
 
 var callLog = rpc.declare({
 	object: 'luci.qwdtt',
@@ -19,12 +19,30 @@ var callLog = rpc.declare({
 	expect: { log: '' }
 });
 
+var callBaselines = rpc.declare({
+	object: 'luci.qwdtt',
+	method: 'getBaselines',
+	expect: { '': {} }
+});
+
 function tunnels() {
-	return network.getNetworks().then(function(networks) {
-		return networks.filter(function(net) {
+	return Promise.all([ network.getNetworks(), callBaselines() ]).then(function(res) {
+		var baselines = res[1] || {};
+
+		return res[0].filter(function(net) {
 			return net.getProtocol() == 'qwdtt';
+		}).map(function(net) {
+			net.qwdttBase = baselines[net.getName()] || null;
+			return net;
 		});
 	});
+}
+
+/* Counted from the last time the interface came up. A device recreated since
+   then counts from zero and so reads below the baseline, in which case the raw
+   total is already the figure that is wanted. */
+function since(now, base) {
+	return (base != null && now >= base) ? now - base : now;
 }
 
 function peerOf(net) {
@@ -53,11 +71,17 @@ function stateOf(net) {
 		]);
 	}
 
+	var base = net.qwdttBase || {};
+
 	return L.itemlist(E('span'), [
 		_('Uptime'), '%t'.format(net.getUptime()),
 		_('IPv4'), (net.getIPAddrs() || [])[0] || null,
-		_('RX'), device ? '%.2mB (%d %s)'.format(device.getRXBytes(), device.getRXPackets(), _('Pkts.')) : null,
-		_('TX'), device ? '%.2mB (%d %s)'.format(device.getTXBytes(), device.getTXPackets(), _('Pkts.')) : null
+		_('RX'), device ? '%.2mB (%d %s)'.format(
+			since(device.getRXBytes(), base.rx_bytes),
+			since(device.getRXPackets(), base.rx_packets), _('Pkts.')) : null,
+		_('TX'), device ? '%.2mB (%d %s)'.format(
+			since(device.getTXBytes(), base.tx_bytes),
+			since(device.getTXPackets(), base.tx_packets), _('Pkts.')) : null
 	]);
 }
 

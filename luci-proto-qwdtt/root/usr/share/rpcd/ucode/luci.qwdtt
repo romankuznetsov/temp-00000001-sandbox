@@ -8,11 +8,44 @@
 
 'use strict';
 
-import { popen } from 'fs';
+import { popen, lsdir, open } from 'fs';
 
 const LINES = 400;
+const RUNDIR = '/var/run/qwdtt';
 
 const methods = {
+	// What each tunnel's device counters read when netifd last brought the
+	// interface up, written by /lib/netifd/qwdtt-up.sh. The device is
+	// deliberately longer-lived than the interface, so without these the page
+	// would report bytes from before a restart against an uptime that starts
+	// at it.
+	getBaselines: {
+		call: function() {
+			const out = {};
+
+			for (let entry in (lsdir(RUNDIR) ?? [])) {
+				const name = match(entry, /^(.+)\.counters$/);
+				if (!name)
+					continue;
+
+				const fd = open(`${RUNDIR}/${entry}`, 'r');
+				if (!fd)
+					continue;
+
+				const fields = split(trim(fd.read('line') ?? ''), ' ');
+				fd.close();
+
+				if (length(fields) == 4)
+					out[name[1]] = {
+						rx_bytes: +fields[0], rx_packets: +fields[1],
+						tx_bytes: +fields[2], tx_packets: +fields[3]
+					};
+			}
+
+			return out;
+		}
+	},
+
 	getLog: {
 		args: { name: 'name' },
 		call: function(req) {
