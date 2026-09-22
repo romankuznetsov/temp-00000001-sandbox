@@ -66,11 +66,16 @@ json_get_values() { eval "$1=\"\$(cfg \"\$SECTION\" \"\$2\")\""; }
 logger() { shift 2; echo "log: $*"; }
 
 uci() {
-	[ "${2:-}" = get ] || return 0
-	case "$3" in
-	'system.@system[0].zonename') echo "Europe/Moscow" ;;
-	network.*.proto) _s=${3#network.}; cfg "${_s%.proto}" proto ;;
+	[ "${1:-}" = -q ] && shift
+	case "${1:-}" in
+	get)
+		case "$2" in
+		'system.@system[0].zonename') echo "Europe/Moscow" ;;
+		network.*.proto) _s=${2#network.}; cfg "${_s%.proto}" proto ;;
+		esac ;;
+	delete) echo "deleted: $2" ;;
 	esac
+	return 0
 }
 
 proto_config_add_string() { :; }
@@ -210,9 +215,13 @@ refusal "two tunnels with one device_id" twin DUPLICATE_DEVICE_ID
 got=$(proto_qwdtt_teardown qwdtt0 2>&1)
 check "a teardown of a tunnel that still exists" "$got" "killed: qwdtt0"
 
+# The SNAT rule names the address the server assigned, so it is worth exactly
+# as much as the tunnel is: left behind, it would rewrite the source of
+# whatever took the device's name next.
 got=$(proto_qwdtt_teardown gone 2>&1)
 check "a teardown of a section that has been deleted" "$got" 'killed: gone
-dropped: gone'
+dropped: gone
+deleted: firewall.gone_snat'
 
 [ "$fail" = 0 ] || exit 1
 echo "qwdtt.sh: ok"

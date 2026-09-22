@@ -178,7 +178,14 @@ proto_qwdtt_teardown() {
 	local config="$1"
 
 	proto_kill_command "$config"
-	[ "$(uci -q get "network.$config.proto")" = qwdtt ] || drop_device "$config"
+	[ "$(uci -q get "network.$config.proto")" = qwdtt ] && return 0
+
+	drop_device "$config"
+	# The SNAT rule the up-script wrote names an address nothing answers to any
+	# more, so it goes with the tunnel rather than outliving it.
+	uci -q delete "firewall.${config}_snat" || return 0
+	uci commit firewall
+	[ ! -x /etc/init.d/firewall ] || /etc/init.d/firewall reload >/dev/null 2>&1
 }
 
 [ -n "$INCLUDE_ONLY" ] || add_protocol qwdtt

@@ -32,6 +32,26 @@ if [ "$peerdns" = 1 ]; then
 	done
 fi
 
+# What the firewall zone would otherwise get from masquerading, without the
+# notifier that comes with it - see the reasoning in the uci-defaults script
+# that writes the zone. Rewritten only when the server hands out a different
+# address, because reloading the firewall on every reconnect would be a cost
+# paid for nothing.
+snat="firewall.${INTERFACE}_snat"
+if [ "$(uci -q get "$snat.snat_ip")" != "$IPADDR" ]; then
+	uci -q batch <<-EOF
+		set $snat=nat
+		set $snat.name='${INTERFACE}-snat'
+		set $snat.family='ipv4'
+		set $snat.src='qwdtt'
+		set $snat.device='$DEVICE'
+		set $snat.target='SNAT'
+		set $snat.snat_ip='$IPADDR'
+	EOF
+	uci commit firewall
+	[ ! -x /etc/init.d/firewall ] || /etc/init.d/firewall reload >/dev/null 2>&1
+fi
+
 # The device outlives the interface, so its counters carry on across a restart
 # while netifd starts the uptime again from this update - the two then describe
 # different spans and read as a contradiction. Recording the counters at the

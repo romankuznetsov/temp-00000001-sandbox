@@ -5,14 +5,22 @@
 # network list covers the rest - an interface may be named anything, and one
 # named off-pattern would otherwise sit in no zone at all.
 #
-# input is DROP rather than the REJECT a WAN zone would use, and that is not
-# hardening. Restarting the tunnel takes its device down, which makes the
-# masquerade this zone applies flush every conntrack entry through it. The
-# server's in-flight segments then arrive untracked, REJECT answers each of
-# them with a TCP reset, and connections that were only interrupted are killed
-# outright - measured, with a download reset within nine seconds of an ifup.
-# Dropped instead, they are simply lost: conntrack picks the flow up again and
-# TCP's own retransmission recovers it.
+# The zone deliberately does NOT masquerade, and that is the one setting here
+# it would be easy to put back by mistake. The masquerade target registers a
+# notifier that flushes every conntrack entry through a device the moment that
+# device goes down, which a tunnel restart always does - and an interrupted
+# connection cannot then be picked up, because the first segment to arrive is
+# unrecognised. Measured on a router: 65 seconds to resume and the far end gone
+# before it did, against 5 seconds and an unbroken transfer without it. The
+# LAN still needs its source rewritten, so /lib/netifd/qwdtt-up.sh writes a
+# plain SNAT rule per tunnel to the address the server assigned; SNAT registers
+# no such notifier.
+#
+# input is DROP rather than the REJECT a WAN zone would use, for the same
+# reason rather than for hardening: a packet conntrack does not recognise -
+# which is what the server's in-flight segments become whenever the tunnel's
+# address does change - must not be answered with a TCP reset, or a connection
+# that was only interrupted is killed outright.
 uci -q batch <<'EOF'
 set firewall.qwdtt=zone
 set firewall.qwdtt.name='qwdtt'
@@ -22,7 +30,7 @@ delete firewall.qwdtt.network
 set firewall.qwdtt.input='DROP'
 set firewall.qwdtt.output='ACCEPT'
 set firewall.qwdtt.forward='ACCEPT'
-set firewall.qwdtt.masq='1'
+set firewall.qwdtt.masq='0'
 set firewall.qwdtt.mtu_fix='1'
 set firewall.qwdtt_lan=forwarding
 set firewall.qwdtt_lan.src='lan'
