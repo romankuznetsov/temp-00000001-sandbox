@@ -50,8 +50,8 @@ msgstr "Журнал"
 msgid "All tunnels"
 msgstr "Все туннели"
 
-msgid "The last 400 lines the system log holds, newest last. netifd runs every protocol under its own name, so the client tags each of its lines with qwdtt- and the interface it belongs to."
-msgstr "Последние 400 строк системного журнала, новые снизу. netifd запускает все протоколы под своим именем, поэтому клиент помечает каждую свою строку префиксом qwdtt- и именем интерфейса, которому она принадлежит."
+msgid "The last 400 lines the system log holds, newest last. netifd prefixes every line with the interface it came from, which is what one tunnel is picked out by."
+msgstr "Последние 400 строк системного журнала, новые снизу. netifd подставляет в начало каждой строки имя интерфейса, от которого она пришла, - по нему и отбираются строки одного туннеля."
 
 msgid "Collecting data..."
 msgstr "Сбор данных..."

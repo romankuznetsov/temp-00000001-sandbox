@@ -2,9 +2,9 @@
 //
 // The one thing the status page cannot get from netifd. Addresses, uptime and
 // byte counters come off the interface for free now that netifd owns it, so
-// the only backend left is the log: the client writes to stdout, netifd's
-// process manager puts that in the system log, and `qwdtt-<interface>` is the
-// prefix the client tags each line with.
+// the only backend left is the log: the client writes to stdout and netifd's
+// process manager puts that in the system log, prefixed with the interface the
+// task belongs to. That prefix is what a line is found by.
 
 'use strict';
 
@@ -24,7 +24,7 @@ const methods = {
 			if (!match(name, /^[A-Za-z0-9_]*$/))
 				return { log: '' };
 
-			const tag = length(name) ? `qwdtt-${name}` : 'qwdtt';
+			const tag = length(name) ? name : 'qwdtt';
 			const out = popen(`logread -e ${tag} 2>/dev/null | tail -n ${LINES}`);
 
 			return { log: out ? (out.read('all') ?? '') : '' };

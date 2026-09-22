@@ -146,7 +146,7 @@ return view.extend({
 			E('div', { 'id': 'qwdtt-table' }, [ renderTable(nets) ]),
 			E('h3', [ _('Log') ]),
 			E('div', { 'class': 'cbi-section-descr' },
-				_('The last 400 lines the system log holds, newest last. netifd runs every protocol under its own name, so the client tags each of its lines with qwdtt- and the interface it belongs to.')),
+				_('The last 400 lines the system log holds, newest last. netifd prefixes every line with the interface it came from, which is what one tunnel is picked out by.')),
 			E('div', { 'style': 'margin-bottom:.5em' }, [ picker ]),
 			box
 		]);

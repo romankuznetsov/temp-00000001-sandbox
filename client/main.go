@@ -233,11 +233,12 @@ func main() {
 	rawTunSelfTestDuration := flag.Duration("rawtun-self-test-duration", 5*time.Second, "temporary RAW TUN self-test duration")
 
 	flag.Parse()
-	// netifd runs every protocol's task under its own name, so without this
-	// each tunnel's lines are indistinguishable in the system log. The tag the
-	// documented `logread -e qwdtt-qwdtt0` looks for is this prefix.
+	// netifd already prefixes each line of a protocol task with the interface
+	// it belongs to, and syslog already dates it. Repeating either is what put
+	// two clocks on one line, the second of them in UTC while syslog's is
+	// local.
 	if *netifd {
-		log.SetPrefix("qwdtt-" + os.Getenv("INTERFACE") + " ")
+		log.SetFlags(0)
 	}
 	if *rawTunSelfTest != "" {
 		tun, testErr := createNativeRawTUN(*tunName)
