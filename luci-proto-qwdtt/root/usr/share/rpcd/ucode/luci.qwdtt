@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The one thing the status page cannot get from netifd. Addresses, uptime and
+// byte counters come off the interface for free now that netifd owns it, so
+// the only backend left is the log: the client writes to stdout and netifd's
+// process manager puts that in the system log, prefixed with the interface the
+// task belongs to. That prefix is what a line is found by.
+
+'use strict';
+
+import { popen, lsdir, open } from 'fs';
+
+const LINES = 400;
+const RUNDIR = '/var/run/qwdtt';
+
+const methods = {
+	// What each tunnel's device counters read when netifd last brought the
+	// interface up, written by /lib/netifd/qwdtt-up.sh. The device is
+	// deliberately longer-lived than the interface, so without these the page
+	// would report bytes from before a restart against an uptime that starts
+	// at it.
+	getBaselines: {
+		call: function() {
+			const out = {};
+
+			for (let entry in (lsdir(RUNDIR) ?? [])) {
+				const name = match(entry, /^(.+)\.counters$/);
+				if (!name)
+					continue;
+
+				const fd = open(`${RUNDIR}/${entry}`, 'r');
+				if (!fd)
+					continue;
+
+				const fields = split(trim(fd.read('line') ?? ''), ' ');
+				fd.close();
+
+				if (length(fields) == 4)
+					out[name[1]] = {
+						rx_bytes: +fields[0], rx_packets: +fields[1],
+						tx_bytes: +fields[2], tx_packets: +fields[3]
+					};
+			}
+
+			return out;
+		}
+	},
+
+	getLog: {
+		args: { name: 'name' },
+		call: function(req) {
+			const name = req.args?.name ?? '';
+
+			// The name reaches a shell, and every qWDTT interface is a uci
+			// section name, which uci has already limited to this alphabet.
+			// Anything else is refused rather than quoted.
+			if (!match(name, /^[A-Za-z0-9_]*$/))
+				return { log: '' };
+
+			const tag = length(name) ? name : 'qwdtt';
+			const out = popen(`logread -e ${tag} 2>/dev/null | tail -n ${LINES}`);
+
+			return { log: out ? (out.read('all') ?? '') : '' };
+		}
+	}
+};
+
+return { 'luci.qwdtt': methods };

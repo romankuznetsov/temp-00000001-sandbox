@@ -2,59 +2,42 @@
 
 package main
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-// The exclusivity is the point: a tunnel selected by mark must not also claim
-// everything arriving from the LAN, or a second tunnel never sees a packet.
-func TestRuleSelector(t *testing.T) {
-	tests := []struct {
-		name  string
-		tun   nativeRawTUN
-		wants string
-	}{
-		{
-			name: "lan interface when no mark is set",
-			tun: nativeRawTUN{
-				lanInterface: "br-lan",
-				route:        rawRoute{table: "51820", priority: "10000"},
-			},
-			wants: "iif br-lan lookup 51820 priority 10000",
-		},
-		{
-			name: "mark replaces the interface, not adds to it",
-			tun: nativeRawTUN{
-				lanInterface: "br-lan",
-				route:        rawRoute{table: "51821", priority: "10001", fwmark: "0x100/0xff00"},
-			},
-			wants: "fwmark 0x100/0xff00 lookup 51821 priority 10001",
-		},
+// Rejected before /dev/net/tun is opened, so this runs unprivileged. The name
+// reaches `ip` as an argument, which is why a shell metacharacter matters as
+// much as a name the kernel would not take.
+func TestCreateNativeRawTUNRejectsBadNames(t *testing.T) {
+	names := []string{
+		"qwdtt 0",
+		"qwdtt0; reboot",
+		"qwdtt/0",
+		"waytoolongfortunname",
 	}
 
-	for _, tc := range tests {
-		got := strings.Join(tc.tun.ruleSelector(), " ")
-		if got != tc.wants {
-			t.Errorf("%s: got %q, want %q", tc.name, got, tc.wants)
+	for _, name := range names {
+		if _, err := createNativeRawTUN(name); err == nil {
+			t.Errorf("%q: accepted", name)
 		}
 	}
 }
 
-// Rejected before anything is opened, so this runs unprivileged.
-func TestCreateNativeRawTUNRejectsBadRouting(t *testing.T) {
+// Both are checked before ip runs, so nothing here touches the router.
+func TestConfigureRejectsBadAddressAndMTU(t *testing.T) {
 	tests := []struct {
-		name  string
-		route rawRoute
+		name    string
+		address string
+		mtu     int
 	}{
-		{"empty table", rawRoute{table: "", priority: "10000"}},
-		{"table is not a number", rawRoute{table: "main", priority: "10000"}},
-		{"priority is not a number", rawRoute{table: "51820", priority: "high"}},
-		{"fwmark is not a mark", rawRoute{table: "51820", priority: "10000", fwmark: "0x100; reboot"}},
+		{"not an address", "not-an-address", 1300},
+		{"IPv6, and this tunnel carries IPv4", "fd00::1", 1300},
+		{"MTU below the IPv4 minimum", "10.70.0.2", 100},
+		{"MTU past any link that exists", "10.70.0.2", 100000},
 	}
 
+	tun := &nativeRawTUN{name: "qwdtt0"}
 	for _, tc := range tests {
-		if _, err := createNativeRawTUN("qwdtt0", "br-lan", "10.0.0.2", 1300, tc.route); err == nil {
+		if err := tun.configure(tc.address, tc.mtu); err == nil {
 			t.Errorf("%s: accepted", tc.name)
 		}
 	}

@@ -22,14 +22,6 @@ var CaptchaResultChan = make(chan string, 1)
 
 var captchaModeValue atomic.Value
 
-// Policy routing for RAW TUN mode. Declared here rather than beside the Linux
-// implementation because the stub for every other platform takes it too.
-type rawRoute struct {
-	table    string
-	priority string
-	fwmark   string
-}
-
 func init() {
 	captchaModeValue.Store("auto")
 }
@@ -236,23 +228,28 @@ func main() {
 	turnTCP := flag.Bool("turn-tcp", fileConfig.TurnTCP, "connect to the TURN relay over TCP instead of UDP (works around UDP throttling on some networks, e.g. Rostelecom)")
 	tunFdSock := flag.String("tun-fd-sock", "", "unix socket for receiving the TUN fd from Android (only with -mode rawtun)")
 	tunName := flag.String("tun-name", fileConfig.TunName, "Linux/OpenWrt TUN interface name")
-	lanInterface := flag.String("lan-interface", fileConfig.LANInterface, "OpenWrt LAN interface routed through RAW TUN")
+	netifd := flag.Bool("netifd", false, "hand the RAW config to netifd through "+netifdUpScript+" instead of configuring the TUN directly")
 	rawTunSelfTest := flag.String("rawtun-self-test", "", "create a temporary OpenWrt RAW TUN with this IPv4 address")
 	rawTunSelfTestDuration := flag.Duration("rawtun-self-test-duration", 5*time.Second, "temporary RAW TUN self-test duration")
-	// The defaults are the values this used to hardcode, so a command line
-	// that does not mention them behaves as before. They exist because two
-	// clients on one router cannot share a table: each flushes it on start and
-	// on exit, so the second to start takes the first one's traffic and the
-	// first to stop strands the other.
-	routeTable := flag.String("route-table", "51820", "policy routing table for RAW TUN (Linux/OpenWrt)")
-	rulePriority := flag.String("rule-priority", "10000", "priority of the ip rule that selects that table")
-	routeFwmark := flag.String("route-fwmark", "", "route traffic carrying this fwmark (value or value/mask) instead of everything arriving from -lan-interface")
 
 	flag.Parse()
-	rawRouteOpts := rawRoute{table: *routeTable, priority: *rulePriority, fwmark: *routeFwmark}
+	// netifd already prefixes each line of a protocol task with the interface
+	// it belongs to, and syslog already dates it. Repeating either is what put
+	// two clocks on one line, the second of them in UTC while syslog's is
+	// local.
+	if *netifd {
+		log.SetFlags(0)
+		netifdManaged = true
+	}
 	if *rawTunSelfTest != "" {
-		tun, testErr := createNativeRawTUN(*tunName, *lanInterface, *rawTunSelfTest, 1300, rawRouteOpts)
+		tun, testErr := createNativeRawTUN(*tunName)
 		if testErr != nil {
+			log.Fatalf("[RAW SELF-TEST] %v", testErr)
+		}
+		// The device persists, so a failure here has to take it away as well:
+		// the point of the self-test is that it leaves the router unchanged.
+		if testErr = tun.configure(*rawTunSelfTest, 1300); testErr != nil {
+			tun.destroy()
 			log.Fatalf("[RAW SELF-TEST] %v", testErr)
 		}
 		log.Printf("[RAW SELF-TEST] TUN %s is up on %s", tun.name, *rawTunSelfTest)
@@ -497,7 +494,17 @@ func main() {
 						cancel()
 						return
 					}
-					nativeTun, nativeErr := createNativeRawTUN(*tunName, *lanInterface, ip, mtu, rawRouteOpts)
+					nativeTun, nativeErr := createNativeRawTUN(*tunName)
+					if nativeErr == nil {
+						if *netifd {
+							nativeErr = notifyNetifd(nativeTun.name, ip, dnsCSV, mtu)
+						} else {
+							nativeErr = nativeTun.configure(ip, mtu)
+						}
+						if nativeErr != nil {
+							nativeTun.cleanup()
+						}
+					}
 					if nativeErr != nil {
 						log.Printf("[RAW] Linux/OpenWrt TUN error: %v", nativeErr)
 						cancel()
@@ -505,7 +512,7 @@ func main() {
 					}
 					context.AfterFunc(ctx, nativeTun.cleanup)
 					tunFile = nativeTun.file
-					log.Printf("[RAW] OpenWrt TUN %s is up, LAN %s routed into the tunnel", nativeTun.name, nativeTun.lanInterface)
+					log.Printf("[RAW] OpenWrt TUN %s is up on %s", nativeTun.name, ip)
 				}
 				disp.AttachTUN(tunFile)
 				log.Println("[RAW] TUN attached, traffic is flowing")
