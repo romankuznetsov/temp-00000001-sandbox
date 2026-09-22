@@ -1,0 +1,60 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-proto-qwdtt\n"
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "qWDTT"
+msgstr "qWDTT"
+
+msgid "Tunnel"
+msgstr "Туннель"
+
+msgid "Peer"
+msgstr "Сервер"
+
+msgid "Device"
+msgstr "Устройство"
+
+msgid "Status"
+msgstr "Состояние"
+
+msgid "No qWDTT interfaces are configured."
+msgstr "Интерфейсы qWDTT не настроены."
+
+msgid "connecting"
+msgstr "подключается"
+
+msgid "down"
+msgstr "выключен"
+
+msgid "Uptime"
+msgstr "Время работы"
+
+msgid "IPv4"
+msgstr "IPv4"
+
+msgid "RX"
+msgstr "RX"
+
+msgid "TX"
+msgstr "TX"
+
+msgid "Pkts."
+msgstr "пакетов"
+
+msgid "Log"
+msgstr "Журнал"
+
+msgid "All tunnels"
+msgstr "Все туннели"
+
+msgid "The last 400 lines the system log holds, newest last. netifd runs every protocol under its own name, so the client tags each of its lines with qwdtt- and the interface it belongs to."
+msgstr "Последние 400 строк системного журнала, новые снизу. netifd запускает все протоколы под своим именем, поэтому клиент помечает каждую свою строку префиксом qwdtt- и именем интерфейса, которому она принадлежит."
+
+msgid "Collecting data..."
+msgstr "Сбор данных..."
+
+msgid "Log is empty"
+msgstr "Журнал пуст"

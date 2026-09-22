@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The one thing the status page cannot get from netifd. Addresses, uptime and
+// byte counters come off the interface for free now that netifd owns it, so
+// the only backend left is the log: the client writes to stdout, netifd's
+// process manager puts that in the system log, and `qwdtt-<interface>` is the
+// prefix the client tags each line with.
+
+'use strict';
+
+import { popen } from 'fs';
+
+const LINES = 400;
+
+const methods = {
+	getLog: {
+		args: { name: 'name' },
+		call: function(req) {
+			const name = req.args?.name ?? '';
+
+			// The name reaches a shell, and every qWDTT interface is a uci
+			// section name, which uci has already limited to this alphabet.
+			// Anything else is refused rather than quoted.
+			if (!match(name, /^[A-Za-z0-9_]*$/))
+				return { log: '' };
+
+			const tag = length(name) ? `qwdtt-${name}` : 'qwdtt';
+			const out = popen(`logread -e ${tag} 2>/dev/null | tail -n ${LINES}`);
+
+			return { log: out ? (out.read('all') ?? '') : '' };
+		}
+	}
+};
+
+return { 'luci.qwdtt': methods };

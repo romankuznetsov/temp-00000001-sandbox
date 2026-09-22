@@ -4,15 +4,15 @@
 # SDK runs.
 #
 # Building it from source inside the SDK needs go >= 1.25, which the 24.10 feed
-# cannot supply, and that floor is what kept this package off 24.10 and made
-# the qwdtt package unable to depend on it. The client is a static
-# CGO_ENABLED=0 ELF, so the target toolchain contributes nothing to it:
-# packaging the prebuilt binary instead builds on every SDK in seconds.
+# cannot supply, and that floor is what kept this package off 24.10 entirely.
+# The client is a static CGO_ENABLED=0 ELF, so the target toolchain contributes
+# nothing to it: packaging the prebuilt binary instead builds on every SDK in
+# seconds.
 
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=qwdtt-client
-# The repository's tag, shared with qwdtt and luci-app-qwdtt.
+# The repository's tag, shared with luci-proto-qwdtt.
 PKG_VERSION:=1.2.0
 PKG_RELEASE:=1
 
@@ -35,8 +35,9 @@ The client half of qWDTT, a novel VPN based on the WDTT protocol family that
 tunnels traffic through VK TURN servers. It creates the TUN interface and
 carries the LAN's IPv4 traffic to a qWDTT server.
 
-Neither the control script nor the LuCI page is here: see the qwdtt and
-luci-app-qwdtt packages.
+It also ships the netifd protocol handler, so a tunnel is an interface with
+option proto 'qwdtt' in /etc/config/network rather than a service of its own.
+The web interface for it is the separate luci-proto-qwdtt package.
 endef
 
 # Nothing is fetched or compiled; package.mk still wants the directory.
@@ -57,6 +58,14 @@ define Package/qwdtt-client/install
 	test -f ./files/qwdtt-client
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/qwdtt-client $(1)/usr/bin/qwdtt-client
+	$(INSTALL_DIR) $(1)/lib/netifd/proto
+	$(INSTALL_BIN) ./files/qwdtt.sh $(1)/lib/netifd/proto/qwdtt.sh
+	$(INSTALL_BIN) ./files/qwdtt-up.sh $(1)/lib/netifd/qwdtt-up.sh
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	# Before the firewall one, so the zone's network list sees the interfaces
+	# the conversion has just written.
+	$(INSTALL_BIN) ./files/qwdtt.migrate $(1)/etc/uci-defaults/98-qwdtt-netifd
+	$(INSTALL_BIN) ./files/qwdtt.defaults $(1)/etc/uci-defaults/99-qwdtt
 endef
 
 $(eval $(call BuildPackage,qwdtt-client))

@@ -1,0 +1,156 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-proto-qwdtt\n"
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "qWDTT"
+msgstr "qWDTT"
+
+msgid "not a VK call link or a hash"
+msgstr "не ссылка на звонок VK и не хеш"
+
+msgid "expected %d characters, got %d"
+msgstr "ожидается символов: %d, получено: %d"
+
+msgid "unexpected character \"%s\""
+msgstr "недопустимый символ \"%s\""
+
+msgid "line %d: %s"
+msgstr "строка %d: %s"
+
+msgid "At least one hash is required."
+msgstr "Требуется хотя бы один хеш."
+
+msgid "%d hash(es) staged. Use Save & Apply to write them and reload the client."
+msgstr "Подготовлено хешей: %d. Нажмите \"Сохранить и применить\", чтобы записать их и перезапустить клиент."
+
+msgid "Import hashes"
+msgstr "Импорт хешей"
+
+msgid "One per line, and the box starts from the current list so existing entries are kept unless you remove them. A full VK call link may be pasted and is reduced to its hash; commas and semicolons separate too, and duplicates are dropped."
+msgstr "По одному в строке. Поле заполнено текущим списком, поэтому существующие записи сохранятся, если их не удалить. Можно вставить полную ссылку на звонок VK -- она будет приведена к хешу; запятые и точки с запятой тоже разделяют значения, дубликаты отбрасываются."
+
+msgid "Dismiss"
+msgstr "Отмена"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "This interface name is longer than 15 characters, so the tunnel cannot come up: the name is also the TUN device, and the kernel takes 15."
+msgstr "Имя этого интерфейса длиннее 15 символов, поэтому туннель не поднимется: имя - это еще и имя TUN-устройства, а ядро принимает 15 символов."
+
+msgid "Peer host"
+msgstr "Адрес сервера"
+
+msgid "Server hostname or IP address."
+msgstr "Имя хоста или IP-адрес сервера."
+
+msgid "Peer port"
+msgstr "Порт сервера"
+
+msgid "UDP port of the server RAW listener, usually 56003."
+msgstr "UDP-порт RAW-слушателя на сервере, обычно 56003."
+
+msgid "Password"
+msgstr "Пароль"
+
+msgid "Connection password, as set on the server."
+msgstr "Пароль подключения, заданный на сервере."
+
+msgid "Hashes"
+msgstr "Хеши"
+
+msgid "One field per hash, %d characters each. A VK call link may be pasted into a field and is reduced to its hash when saved. Import takes several at once. At least one is required -- the client selects a hash modulo the list length, so an empty list cannot work."
+msgstr "По одному полю на хеш, символов в каждом: %d. В поле можно вставить ссылку на звонок VK -- при сохранении она будет приведена к хешу. \"Импорт\" принимает сразу несколько. Нужен хотя бы один: клиент выбирает хеш по остатку от деления на длину списка, поэтому пустой список работать не может."
+
+msgid "Paste several hashes or VK call links at once"
+msgstr "Вставить сразу несколько хешей или ссылок на звонки VK"
+
+msgid "Import"
+msgstr "Импорт"
+
+msgid "Device ID"
+msgstr "Идентификатор устройства"
+
+msgid "Identifies this tunnel to the server. Two tunnels that share one are a single device to it, and it disconnects them in turn. Left empty, the protocol handler derives it from the hostname and the interface name, which cannot collide."
+msgstr "Идентифицирует этот туннель на сервере. Два туннеля с одинаковым идентификатором для него - одно устройство, и он отключает их по очереди. Если оставить пустым, обработчик протокола соберет идентификатор из имени хоста и имени интерфейса, а такой совпасть не может."
+
+msgid "Routing table"
+msgstr "Таблица маршрутизации"
+
+msgid "Table the tunnel writes its address and default route into. Required: in the main table that default route would carry the client's own traffic to VK back into the tunnel, and the tunnel would never come up."
+msgstr "Таблица, в которую туннель записывает свой адрес и маршрут по умолчанию. Обязательна: в основной таблице этот маршрут увел бы в туннель и собственный трафик клиента к VK, и туннель не поднялся бы никогда."
+
+msgid "Route the LAN through this tunnel"
+msgstr "Направить локальную сеть в этот туннель"
+
+msgid "Writes two ordinary sections of /etc/config/network: a routing rule sending traffic from the lan interface to the table above, and an unreachable default route in that table so nothing escapes to the WAN while the tunnel is down. Edit either of them afterwards on Network -> Routing - to send one client or one destination instead of the whole LAN, narrow the rule there."
+msgstr "Записывает две обычные секции /etc/config/network: правило маршрутизации, отправляющее трафик интерфейса lan в таблицу выше, и маршрут по умолчанию типа unreachable в той же таблице, чтобы, пока туннель лежит, ничего не ушло мимо него в WAN. Обе можно править в разделе Сеть -> Маршрутизация: чтобы направить в туннель один компьютер или одно назначение вместо всей локальной сети, сузьте правило там."
+
+msgid "Workers"
+msgstr "Воркеры"
+
+msgid "Number of parallel sessions. Every tunnel runs its own, so two tunnels cost twice this."
+msgstr "Число параллельных сессий. У каждого туннеля свои, поэтому два туннеля стоят вдвое дороже."
+
+msgid "DNS for VK"
+msgstr "DNS для VK"
+
+msgid "Resolver the client uses to reach VK, which is not the resolver the tunnel hands out: yandex, cloudflare or google, their doh- variants, or custom:IP and doh:URL."
+msgstr "Резолвер, через который клиент находит VK - это не тот резолвер, который раздает туннель: yandex, cloudflare или google, их doh-варианты, либо custom:IP и doh:URL."
+
+msgid "Obfuscation"
+msgstr "Обфускация"
+
+msgid "What the tunnel is disguised as inside the VK call."
+msgstr "Подо что туннель маскируется внутри звонка VK."
+
+msgid "audio"
+msgstr "аудио"
+
+msgid "video"
+msgstr "видео"
+
+msgid "Captcha mode"
+msgstr "Режим капчи"
+
+msgid "How a VK captcha is answered. auto tries the built-in solver and falls back."
+msgstr "Как отвечать на капчу VK. auto сначала пробует встроенный решатель, затем запасные пути."
+
+msgid "VK authorization"
+msgstr "Авторизация VK"
+
+msgid "anonymous joins the call without an account. account uses TURN credentials from a VK account, read from the file below."
+msgstr "anonymous подключается к звонку без учетной записи. account использует учетные данные TURN от аккаунта VK, прочитанные из файла ниже."
+
+msgid "anonymous"
+msgstr "анонимно"
+
+msgid "account"
+msgstr "по аккаунту"
+
+msgid "Anonymous path"
+msgstr "Анонимный путь"
+
+msgid "Which VK endpoint an anonymous join goes through."
+msgstr "Через какую точку входа VK проходит анонимное подключение."
+
+msgid "VK credentials file"
+msgstr "Файл учетных данных VK"
+
+msgid "File holding the TURN credentials of a VK account. Without it, account authorization has nothing to authorize with."
+msgstr "Файл с учетными данными TURN от аккаунта VK. Без него авторизации по аккаунту нечем авторизоваться."
+
+msgid "Disable DTLS"
+msgstr "Отключить DTLS"
+
+msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
+msgstr "Прямой режим: RTP-obfs AEAD поверх TURN без DTLS. Сервер должен быть запущен с -listen-direct, иначе туннель не поднимется."
+
+msgid "TURN over TCP"
+msgstr "TURN через TCP"
+
+msgid "Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom."
+msgstr "Подключаться к TURN по TCP вместо UDP. Обходит ограничение UDP в некоторых сетях, например у Ростелекома."
