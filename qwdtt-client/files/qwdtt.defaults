@@ -26,4 +26,16 @@ done
 
 uci commit firewall
 /etc/init.d/firewall reload
+
+# netifd reads /lib/netifd/proto only when it starts, so a protocol installed
+# into a running system stays invisible to it and `ifup` answers NO_DEVICE - a
+# reload does not help, because the handler list is not part of the config. On
+# a first boot netifd is not up yet and there is nothing to restart.
+if handlers=$(ubus call network get_proto_handlers 2>/dev/null); then
+	case "$handlers" in
+	*'"qwdtt"'*) ;;
+	*) /etc/init.d/network restart ;;
+	esac
+fi
+
 exit 0

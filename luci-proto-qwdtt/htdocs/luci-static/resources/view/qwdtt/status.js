@@ -81,8 +81,13 @@ function renderTable(nets) {
 }
 
 return view.extend({
+	/* network.getNetworks() reads the system feature probe synchronously and
+	   throws if it has not resolved, which on a router with no wifi is where a
+	   view that asks for networks first thing lands. Waiting for it here costs
+	   one cached call and is what keeps this page working where the stock
+	   Interfaces page does not. */
 	load: function() {
-		return tunnels();
+		return L.probeSystemFeatures().then(tunnels);
 	},
 
 	/* Which tunnel's log is on screen. Empty is every tunnel, which is what
