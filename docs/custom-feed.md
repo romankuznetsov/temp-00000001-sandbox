@@ -45,8 +45,8 @@ Feed публикуется workflow `.github/workflows/release.yml` при вы
 
 В feed публикуются:
 
-- `.apk` или `.ipk` пакеты: `qwdtt-client` (под архитектуру), `qwdtt`,
-  `luci-app-qwdtt`, `luci-i18n-qwdtt-ru` (не зависят от архитектуры)
+- `.apk` или `.ipk` пакеты: `qwdtt-client` (под архитектуру),
+  `luci-proto-qwdtt`, `luci-i18n-qwdtt-ru` (не зависят от архитектуры)
 - индекс: `packages.adb` для 25.12, `Packages`, `Packages.gz` и `Packages.sig`
   для 24.10
 - публичные ключи для проверки подписи индекса
@@ -95,7 +95,7 @@ apk update
 Установка:
 
 ```sh
-apk add qwdtt-client qwdtt luci-app-qwdtt
+apk add qwdtt-client luci-proto-qwdtt
 ```
 
 Русификация интерфейса LuCI - отдельным пакетом:
@@ -127,7 +127,7 @@ opkg update
 Установка:
 
 ```sh
-opkg install qwdtt-client qwdtt luci-app-qwdtt
+opkg install qwdtt-client luci-proto-qwdtt
 ```
 
 Русификация интерфейса LuCI - отдельным пакетом:
@@ -149,8 +149,8 @@ opkg install luci-i18n-qwdtt-ru
    соответственно.
 3. В System -> Software -> Configuration допишите строку feed для своей
    архитектуры - ту же, что в разделах выше.
-4. Сохраните, нажмите "Update lists…", затем поставьте `qwdtt-client`,
-   `qwdtt` и `luci-app-qwdtt` в System -> Software.
+4. Сохраните, нажмите "Update lists…", затем поставьте `qwdtt-client` и
+   `luci-proto-qwdtt` в System -> Software.
 
 Загружать `.apk` файлом через LuCI бессмысленно: бэкенд вызывает
 `apk add <файл>` без `--allow-untrusted`, а отдельные пакеты ключом проекта не
@@ -182,11 +182,11 @@ opkg install luci-i18n-qwdtt-ru
 Минимальная проверка, что feed виден и доверен:
 
 ```sh
-apk update && apk add --simulate qwdtt
+apk update && apk add --simulate luci-proto-qwdtt
 ```
 
 ```sh
-opkg update && opkg install --noaction qwdtt
+opkg update && opkg install --noaction luci-proto-qwdtt
 ```
 
 Что смотреть, если не работает:
