@@ -502,7 +502,7 @@ return network.registerProtocol('qwdtt', {
 
 		o = s.taboption('qwdtt', form.Value, 'workers', _('Workers'),
 			withDefault(String(WORKERS_PER_GROUP),
-				_('Parallel sessions, started in groups of %d. One VK call sustains three groups before its relay quota starts refusing, so the ceiling is %d per hash and up to %d hashes count towards it: %d, %d, %d, %d. With a VK account it is %d in all, which is about what one account is given. Every tunnel runs its own, so two tunnels cost twice this.')
+				_('Parallel sessions, started in groups of %d. One VK call sustains three groups before its relay quota starts refusing, so the ceiling is %d per hash and up to %d hashes count towards it: %d, %d, %d, %d. With a VK account it is %d in all, which is about what one account is given.')
 					.format(WORKERS_PER_GROUP, WORKERS_PER_GROUP * GROUPS_PER_HASH,
 						MAX_HASHES,
 						workerCeiling(1, false), workerCeiling(2, false),
@@ -548,7 +548,7 @@ return network.registerProtocol('qwdtt', {
 		};
 
 		o = s.taboption('qwdtt', form.Flag, '_lanroute',
-			_('Route the LAN through this tunnel'),
+			_('Route LAN client traffic through this tunnel'),
 			withDefault(_('on'), _('Writes an ordinary routing rule sending traffic from the lan interface to the routing table of this tunnel. Edit it afterwards on Network -> Routing - to send one client or one destination instead of the whole LAN, narrow it there and it stays narrowed; only the table it looks up is kept in step from here.')));
 		o.rmempty = false;
 		/* So that a table changed under Advanced Settings is carried into the
@@ -592,7 +592,7 @@ return network.registerProtocol('qwdtt', {
 		};
 
 		o = s.taboption('qwdtt', form.Flag, '_killswitch',
-			_('Hold traffic while the tunnel is down'),
+			_('Do not allow traffic if the tunnel is down (kill switch).'),
 			withDefault(_('on'), _('Writes an unreachable default route into the routing table of this tunnel, so traffic sent there is refused rather than released to the WAN whenever the tunnel is not up. Independent of the rule above: it covers whatever looks up that table, including a rule written by hand.')));
 		o.rmempty = false;
 		o.forcewrite = true;
