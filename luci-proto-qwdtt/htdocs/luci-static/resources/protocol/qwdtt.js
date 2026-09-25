@@ -320,6 +320,16 @@ return network.registerProtocol('qwdtt', {
 		return (network.getIfnameOf(ifname) == this.getIfname());
 	},
 
+	/* Deleting the interface has to take these two with it. They are separate
+	   sections, so nothing else removes them, and the kill switch left behind
+	   is not inert: it is the only route left in a table the rule still looks
+	   up, so whatever the rule matches is refused outright - by a tunnel that
+	   no longer exists and has nothing left to explain it. */
+	deleteConfiguration: function() {
+		dropSection(this.sid + '_rule');
+		dropSection(this.sid + '_killswitch');
+	},
+
 	renderFormOptions: function(s) {
 		var o;
 

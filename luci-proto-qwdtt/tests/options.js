@@ -45,6 +45,11 @@ function makeUci() {
 	};
 }
 
+// The object registerProtocol was handed, kept because not every hook has a
+// widget to reach it by: deleteConfiguration is called by the interface
+// editor's Delete button and by nothing else.
+let lastProto = null;
+
 function load(uci, formvalues) {
 	const opts = {};
 	const section = {
@@ -78,6 +83,7 @@ function load(uci, formvalues) {
 	const proto = fn(form, network, uci, {}, { resource: () => '' },
 		s => s, () => ({}));
 
+	lastProto = proto;
 	proto.renderFormOptions.call({ sid: 'qwdtt0' }, section);
 	return opts;
 }
@@ -110,6 +116,22 @@ function check(what, got, want) {
 		opts._lanroute.cfgvalue('qwdtt0'), '1');
 	check('both point at the table the tunnel was seeded with',
 		uci.get('network', 'qwdtt0_killswitch', 'table'), '51820');
+}
+
+// --- deleting a tunnel takes its routing with it ---------------------------
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+	load(uci, { defaultroute: '1', ip4table: null });
+
+	// Left behind, the kill switch is the only route remaining in a table the
+	// rule still looks up, so everything the rule matches is refused - by a
+	// tunnel that is no longer there to explain it.
+	lastProto.deleteConfiguration.call({ sid: 'qwdtt0' });
+	check('deleting a tunnel removes its rule and its kill switch',
+		[ uci.get('network', 'qwdtt0_rule'),
+		  uci.get('network', 'qwdtt0_killswitch') ], [ null, null ]);
 }
 
 // --- the rule is written once, then left alone -----------------------------
