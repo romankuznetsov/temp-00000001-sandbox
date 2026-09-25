@@ -164,9 +164,26 @@ func (d *Dispatcher) AttachTUN(f *os.File) {
 	close(d.ready)
 }
 
+// Bounded, because readLoop can be parked in a blocking read on the TUN device
+// that nothing is able to end: the fd is deliberately blocking, so closing it
+// does not interrupt a read already in flight, and an idle tunnel may never
+// deliver the packet that would return it. Waiting for that is what left the
+// client running after SIGTERM until whoever stopped it gave up and sent
+// SIGKILL. The only caller is the defer in main, on the way out, and neither
+// loop holds anything that has to be flushed first.
 func (d *Dispatcher) Shutdown() {
 	d.cancel()
-	d.wg.Wait()
+
+	stopped := make(chan struct{})
+	go func() {
+		d.wg.Wait()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+	}
 }
 
 func (d *Dispatcher) Register(w *WorkerSlot) {
