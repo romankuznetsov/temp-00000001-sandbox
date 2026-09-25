@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // The server's RAWCONF separates resolvers with commas and the up-script
@@ -71,6 +72,61 @@ func TestNetifdErrorCode(t *testing.T) {
 	for _, tc := range tests {
 		if got := netifdErrorCode(tc.message); got != tc.want {
 			t.Errorf("%q: got %q, want %q", tc.message, got, tc.want)
+		}
+	}
+}
+
+// The watchdog restarts the tunnel, so the cases it must not fire on matter as
+// much as the one it must. Each step is one tick of netifdTrafficTick.
+func TestStallTracker(t *testing.T) {
+	const tick = netifdTrafficTick
+
+	// up, down after each tick; want is the stall reported at that tick.
+	tests := []struct {
+		name  string
+		steps [][2]int64
+		want  []time.Duration
+	}{
+		{
+			"an idle tunnel never stalls",
+			[][2]int64{{0, 0}, {0, 0}, {0, 0}},
+			[]time.Duration{0, 0, 0},
+		},
+		{
+			"traffic both ways never stalls",
+			[][2]int64{{100, 50}, {200, 120}, {300, 200}},
+			[]time.Duration{0, 0, 0},
+		},
+		{
+			"a tunnel that has never delivered is left to come up",
+			[][2]int64{{100, 0}, {200, 0}, {300, 0}},
+			[]time.Duration{0, 0, 0},
+		},
+		{
+			"one that delivered and stopped accumulates",
+			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {400, 50}},
+			[]time.Duration{0, 0, tick, 2 * tick},
+		},
+		{
+			"one byte back clears it",
+			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {400, 51}},
+			[]time.Duration{0, 0, tick, 0},
+		},
+		{
+			"the lan going quiet clears it, because that is idleness",
+			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {300, 50}, {400, 50}},
+			[]time.Duration{0, 0, tick, 0, 0},
+		},
+	}
+
+	for _, tc := range tests {
+		var s stallTracker
+		now := time.Unix(0, 0)
+		for i, step := range tc.steps {
+			now = now.Add(tick)
+			if got := s.sample(step[0], step[1], now); got != tc.want[i] {
+				t.Errorf("%s: tick %d got %v, want %v", tc.name, i, got, tc.want[i])
+			}
 		}
 	}
 }
