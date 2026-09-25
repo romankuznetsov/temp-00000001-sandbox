@@ -183,7 +183,15 @@ function parseHashes(entries) {
    own nor be turned off without taking a kill switch somebody wanted with
    it. */
 
-var KILL_METRIC = '4096';
+/* The kill switch only has to lose to the tunnel's own default route, and it
+   is the only other route in the table, so the number just has to be larger
+   than any metric that route could carry. netifd gives an interface's routes
+   the interface's own metric, and at 4096 a tunnel set above that lost to its
+   own kill switch: the unreachable default won, the LAN was refused, and the
+   tunnel stayed up throughout. Confirmed on a router - metric 5000 produced
+   "default dev qwdtt0 ... metric 5000" in the tunnel's table. A million is
+   past anything an interface is given. */
+var KILL_METRIC = '1000000';
 
 function tableOf(section_id) {
 	return uci.get('network', section_id, 'ip4table') || '';
@@ -261,9 +269,13 @@ function addKillswitch(section_id, table) {
 		uci.set('network', kill, 'interface', 'loopback');
 		uci.set('network', kill, 'target', '0.0.0.0/0');
 		uci.set('network', kill, 'type', 'unreachable');
-		uci.set('network', kill, 'metric', KILL_METRIC);
 	}
 	uci.set('network', kill, 'table', table);
+	/* Re-asserted rather than written once, unlike the rest. It is not a knob:
+	   the only thing it decides is that this route loses to the tunnel's, and
+	   a kill switch written when the number was lower is one an interface
+	   metric can still outrank. */
+	uci.set('network', kill, 'metric', KILL_METRIC);
 }
 
 /* Only what is there. Removing a section that does not exist still marks the
