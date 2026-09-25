@@ -207,6 +207,12 @@ function freeTable() {
 	return '51820';
 }
 
+/* netifd writes rules of its own for an interface that has an ip4table, and
+   the first of them lands here. It is the one number this must not hand out:
+   two rules at one priority are ordered by whichever the kernel was given
+   first, and nothing in the configuration says which that is. */
+var NETIFD_RULE_PRIORITY = 10000;
+
 /* Below every rule that exists, so a tunnel added second is consulted first.
    The one added first is usually the catch-all, and a rule that matches
    everything has to be asked last or the others never see a packet. */
@@ -219,7 +225,11 @@ function freePriority() {
 			lowest = priority;
 	});
 
-	return String(lowest == null ? 10000 : Math.max(1, lowest - 1));
+	var next = (lowest == null) ? NETIFD_RULE_PRIORITY : lowest - 1;
+	if (next == NETIFD_RULE_PRIORITY)
+		next -= 1;
+
+	return String(Math.max(1, next));
 }
 
 /* Everything but the table is written once, at creation. The description sends

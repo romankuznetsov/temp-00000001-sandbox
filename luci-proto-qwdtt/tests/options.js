@@ -134,6 +134,27 @@ function check(what, got, want) {
 		  uci.get('network', 'qwdtt0_killswitch') ], [ null, null ]);
 }
 
+// --- the rule's priority stays clear of netifd's ---------------------------
+// netifd gives an interface with an ip4table a source rule at 10000, so a
+// first tunnel handed the same number leaves two rules whose order is decided
+// by insertion and written down nowhere.
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+	load(uci, { defaultroute: '1', ip4table: null });
+	check('the first tunnel does not land on the priority netifd uses',
+		uci.get('network', 'qwdtt0_rule', 'priority'), '9999');
+
+	uci.remove('network', 'qwdtt0_rule');
+	uci.add('network', 'rule', 'other');
+	uci.set('network', 'other', 'priority', '10001');
+	const again = load(uci, { defaultroute: '1', ip4table: '51820' });
+	again._lanroute.write('qwdtt0', '1');
+	check('nor does it when the rule below would have put it there',
+		uci.get('network', 'qwdtt0_rule', 'priority'), '9999');
+}
+
 // --- the rule is written once, then left alone -----------------------------
 {
 	const uci = makeUci();
