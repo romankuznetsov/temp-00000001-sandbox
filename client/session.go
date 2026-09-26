@@ -448,9 +448,6 @@ func RunSession(
 	}
 	defer activeConn.Close()
 
-	stats.ActiveConnections.Add(1)
-	defer stats.ActiveConnections.Add(-1)
-
 	// Config request
 	if getConfig && configCh != nil && tp.RawMode {
 		ip, dnsCSV, mtu, confErr := RequestRawConfig(activeConn, deviceID, password)
