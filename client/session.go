@@ -23,21 +23,25 @@ import (
 )
 
 const (
-	workerSendBuf      = 128
-	sessionReadTimeout = 30 * time.Minute // Increased from 60s to 30min
+	workerSendBuf = 128
+	// How often a silent session wakes up, rather than how long one may stay
+	// silent: the Reader re-arms it on expiry instead of acting on it. What
+	// notices a tunnel that has stopped delivering is the watch in netifd.go.
+	sessionReadTimeout = 30 * time.Minute
 	readBufSize        = 1600
 	socketBufSize      = 625 * 1024
 	keepaliveByte      = 0xFF // keepalive marker (DTLS-level or a direct obfs frame)
-	// keepaliveInterval: 1s (as in the reference client) - keeps the TURN
-	// permission/NAT mapping "warm" on each of the session's 18-108 relay
-	// sockets more aggressively than the previous 15s/5s.
+	// Keeps the TURN permission and the NAT mapping warm on each of the
+	// session's relay sockets. It is not a liveness check and cannot be made
+	// into one: nothing answers it. Measured on a router, all that comes back
+	// on an idle tunnel is the relay's own STUN binding response.
 	keepaliveInterval = 10 * time.Second
-	// keepaliveMinSize/keepaliveMaxSize: the keepalive packet no longer has a
-	// fixed size (it used to be 1 byte every time) - a random length of
-	// 25-44 bytes imitates the "silence" of OPUS in a real call, while a
-	// constant size at even intervals is an easily recognisable pattern for DPI.
-	keepaliveMinSize = 25
-	keepaliveMaxSize = 20 // range added on top of keepaliveMinSize (rand.Intn(20))
+	// A random length rather than a fixed one, because a constant size at a
+	// constant interval is an easy pattern for DPI; 25 to 44 bytes passes for
+	// the silence between words of an OPUS call. The second is a range added
+	// on top of the first, not a ceiling of its own.
+	keepaliveMinSize   = 25
+	keepaliveSizeRange = 20
 )
 
 // obfsDirectConn is a net.Conn over the TURN relay WITHOUT DTLS.
@@ -560,7 +564,7 @@ func RunSession(
 			case <-sessCtx.Done():
 				return
 			case <-t.C:
-				size := keepaliveMinSize + rand.Intn(keepaliveMaxSize)
+				size := keepaliveMinSize + rand.Intn(keepaliveSizeRange)
 				pkt := getPktBuf(size)
 				pkt[0] = keepaliveByte
 				copy(pkt[1:17], didBytes)
