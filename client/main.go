@@ -437,7 +437,7 @@ func main() {
 	log.Println("[CLIENT] ═══════════════════════════════════════")
 
 	stats := NewStats()
-	startNetifdTrafficWatch(ctx, cancel, stats)
+	startNetifdTrafficWatch(ctx, cancel, stats, *tunName, peer.IP)
 
 	var disp *Dispatcher
 	if activeConnMode == "rawtun" {

@@ -76,57 +76,60 @@ func TestNetifdErrorCode(t *testing.T) {
 	}
 }
 
-// The watchdog restarts the tunnel, so the cases it must not fire on matter as
-// much as the one it must. Each step is one tick of netifdTrafficTick.
-func TestStallTracker(t *testing.T) {
-	const tick = netifdTrafficTick
-
-	// up, down after each tick; want is the stall reported at that tick.
+// The watch takes a working tunnel down if it is wrong, so both directions
+// matter: probing a tunnel that is delivering is waste, and giving up on one
+// whose server never answered a probe is worse than the fault.
+func TestNetifdWatchAction(t *testing.T) {
 	tests := []struct {
-		name  string
-		steps [][2]int64
-		want  []time.Duration
+		name     string
+		idle     time.Duration
+		answered bool
+		probe    bool
+		giveUp   bool
 	}{
-		{
-			"an idle tunnel never stalls",
-			[][2]int64{{0, 0}, {0, 0}, {0, 0}},
-			[]time.Duration{0, 0, 0},
-		},
-		{
-			"traffic both ways never stalls",
-			[][2]int64{{100, 50}, {200, 120}, {300, 200}},
-			[]time.Duration{0, 0, 0},
-		},
-		{
-			"a tunnel that has never delivered is left to come up",
-			[][2]int64{{100, 0}, {200, 0}, {300, 0}},
-			[]time.Duration{0, 0, 0},
-		},
-		{
-			"one that delivered and stopped accumulates",
-			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {400, 50}},
-			[]time.Duration{0, 0, tick, 2 * tick},
-		},
-		{
-			"one byte back clears it",
-			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {400, 51}},
-			[]time.Duration{0, 0, tick, 0},
-		},
-		{
-			"the lan going quiet clears it, because that is idleness",
-			[][2]int64{{100, 50}, {200, 50}, {300, 50}, {300, 50}, {400, 50}},
-			[]time.Duration{0, 0, tick, 0, 0},
-		},
+		{"a tunnel that is delivering is left alone", time.Second, true, false, false},
+		{"and still left alone just short of the probe", netifdProbeAfter - time.Second, true, false, false},
+		{"quiet for a while, so poke it", netifdProbeAfter, false, true, false},
+		{"quiet past the timeout, but it never answered a probe", netifdStallTimeout, false, true, false},
+		{"quiet past the timeout and it used to answer", netifdStallTimeout, true, true, true},
+		{"long past it", time.Hour, true, true, true},
 	}
 
 	for _, tc := range tests {
-		var s stallTracker
-		now := time.Unix(0, 0)
-		for i, step := range tc.steps {
-			now = now.Add(tick)
-			if got := s.sample(step[0], step[1], now); got != tc.want[i] {
-				t.Errorf("%s: tick %d got %v, want %v", tc.name, i, got, tc.want[i])
-			}
+		probe, giveUp := netifdWatchAction(tc.idle, tc.answered)
+		if probe != tc.probe || giveUp != tc.giveUp {
+			t.Errorf("%s: got probe=%v giveUp=%v, want probe=%v giveUp=%v",
+				tc.name, probe, giveUp, tc.probe, tc.giveUp)
 		}
+	}
+}
+
+// A wrong checksum is dropped by the far end in silence, which would read
+// here as a server that never answers.
+func TestICMPEcho(t *testing.T) {
+	b := icmpEcho(0x1234)
+	if len(b) != 8 || b[0] != icmpEchoRequest {
+		t.Fatalf("not an echo request: %x", b)
+	}
+	// The checksum of a correct packet, checksum field included, is zero.
+	if got := icmpChecksum(b); got != 0 {
+		t.Errorf("checksum does not verify: got %#04x, want 0", got)
+	}
+}
+
+// A raw ICMP read carries the IPv4 header on Linux and not everywhere, and
+// mistaking the version nibble for an ICMP type is silent: it reads as a
+// server that never answers, which is exactly the state that disarms the
+// watch.
+func TestICMPPayload(t *testing.T) {
+	echo := icmpEcho(0x1234)
+	withHeader := append([]byte{0x45, 0, 0, 28, 0, 0, 0, 0, 64, 1, 0, 0,
+		10, 0, 0, 1, 10, 0, 0, 2}, echo...)
+
+	if got := icmpPayload(withHeader); len(got) != len(echo) || got[0] != echo[0] {
+		t.Errorf("header not skipped: got %x", got)
+	}
+	if got := icmpPayload(echo); len(got) != len(echo) {
+		t.Errorf("bare message was altered: got %x", got)
 	}
 }
