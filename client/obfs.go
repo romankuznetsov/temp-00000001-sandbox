@@ -29,24 +29,6 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-var aeadCache sync.Map
-
-func getAEAD(key []byte) (cipher.AEAD, error) {
-	if len(key) != wrapKeyLen {
-		return nil, fmt.Errorf("obfs: key must be %d bytes", wrapKeyLen)
-	}
-	keyStr := string(key)
-	if val, ok := aeadCache.Load(keyStr); ok {
-		return val.(cipher.AEAD), nil
-	}
-	aead, err := chacha20poly1305.New(key)
-	if err != nil {
-		return nil, err
-	}
-	aeadCache.Store(keyStr, aead)
-	return aead, nil
-}
-
 // ─── Configuration ───
 
 // ObfsConfig holds per-session obfuscation parameters.
@@ -135,10 +117,7 @@ const (
 // The output looks like:
 //
 //	[V=2,P=1,X=0,CC=0 | PT | SeqNum | Timestamp | SSRC | encrypted_payload | padding | padLen]
-func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]byte, error) {
-	if len(key) != wrapKeyLen {
-		return nil, fmt.Errorf("obfs: key must be %d bytes (got %d)", wrapKeyLen, len(key))
-	}
+func obfsWrapPacket(aead cipher.AEAD, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]byte, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("obfs: empty payload")
 	}
@@ -151,10 +130,8 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 	seq := state.initSeq + uint16(c)
 	ts := state.initTs + uint32(c)*960 + uint32(c>>16)
 
-	// Build nonce from RTP fields
 	nonce := obfsBuildNonce(cfg.SSRC, seq, ts)
 
-	// Determine padding
 	padRand := 0
 	if cfg.PaddingMax > 0 {
 		var rndBuf [1]byte
@@ -165,7 +142,6 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 
 	headerLen := rtpHeaderLenLegacy
 
-	// Allocate output: header + payload + AEAD tag + padTotal
 	outLen := headerLen + len(payload) + chacha20poly1305.Overhead + padTotal
 	out := make([]byte, outLen)
 
@@ -177,13 +153,8 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 	binary.BigEndian.PutUint32(out[4:8], ts)
 	binary.BigEndian.PutUint32(out[8:12], cfg.SSRC)
 
-	aead, err := getAEAD(key)
-	if err != nil {
-		return nil, fmt.Errorf("obfs: cipher init: %w", err)
-	}
 	sealed := aead.Seal(out[headerLen:headerLen], nonce, payload, out[:headerLen])
 
-	// Random padding bytes
 	padStart := headerLen + len(sealed)
 	if padRand > 0 {
 		rand.Read(out[padStart : padStart+padRand])
@@ -199,10 +170,7 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 
 // obfsUnwrapPacket strips the RTP header+extension, removes padding, and
 // decrypts the payload. Returns number of plaintext bytes written to dst.
-func obfsUnwrapPacket(key, wire, dst []byte) (int, error) {
-	if len(key) != wrapKeyLen {
-		return 0, fmt.Errorf("obfs: key must be %d bytes (got %d)", wrapKeyLen, len(key))
-	}
+func obfsUnwrapPacket(aead cipher.AEAD, wire, dst []byte) (int, error) {
 	if len(wire) < rtpHeaderLenLegacy+1 { // minimum: bare 12-byte header + at least 1 byte
 		return 0, errors.New("obfs: packet too short")
 	}
@@ -248,12 +216,7 @@ func obfsUnwrapPacket(key, wire, dst []byte) (int, error) {
 		return 0, errors.New("obfs: dst buffer too small")
 	}
 
-	// Build nonce and decrypt
 	nonce := obfsBuildNonce(ssrc, seq, ts)
-	aead, err := getAEAD(key)
-	if err != nil {
-		return 0, fmt.Errorf("obfs: cipher init: %w", err)
-	}
 	plain, err := aead.Open(dst[:0], nonce, wire[headerLen:payloadEnd], wire[:headerLen])
 	if err != nil {
 		return 0, fmt.Errorf("obfs: auth: %w", err)

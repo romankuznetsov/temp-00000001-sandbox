@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/cipher"
 	"log"
 	"math/rand"
 	"net"
@@ -377,8 +378,8 @@ type TurnParams struct {
 	Host     string
 	Port     string
 	Hashes   []string
-	WrapKey  []byte // Password-derived WRAP key (32 bytes), nil = disabled
-	ObfsMode string // "audio" or "video" - RTP masking mode
+	WrapAEAD cipher.AEAD // Derived from the connection password, nil = disabled
+	ObfsMode string      // "audio" or "video" - RTP masking mode
 	// NoDTLS: skip DTLS and run RTP-obfs AEAD directly over the TURN relay.
 	// Requires a server that can accept direct (DTLS-less) sessions on a
 	// separate port/listener - see server.go -listen-direct.

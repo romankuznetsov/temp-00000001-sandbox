@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/cipher"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -51,7 +52,7 @@ const (
 type obfsDirectConn struct {
 	relay      net.PacketConn
 	peer       net.Addr
-	wrapKey    []byte
+	aead       cipher.AEAD
 	cfg        *ObfsConfig
 	writeState *ObfsState
 }
@@ -66,7 +67,7 @@ func (c *obfsDirectConn) Read(b []byte) (int, error) {
 		if !obfsIsRTPPacket(wire[:n]) {
 			continue
 		}
-		m, unwrapErr := obfsUnwrapPacket(c.wrapKey, wire[:n], b)
+		m, unwrapErr := obfsUnwrapPacket(c.aead, wire[:n], b)
 		if unwrapErr != nil {
 			continue
 		}
@@ -75,7 +76,7 @@ func (c *obfsDirectConn) Read(b []byte) (int, error) {
 }
 
 func (c *obfsDirectConn) Write(b []byte) (int, error) {
-	wrapped, err := obfsWrapPacket(c.wrapKey, b, c.cfg, c.writeState)
+	wrapped, err := obfsWrapPacket(c.aead, b, c.cfg, c.writeState)
 	if err != nil {
 		return 0, err
 	}
@@ -291,7 +292,7 @@ func RunSession(
 		}
 	}()
 
-	useWrap := len(tp.WrapKey) == wrapKeyLen
+	useWrap := tp.WrapAEAD != nil
 
 	var activeConn net.Conn
 	var relayWg sync.WaitGroup
@@ -303,7 +304,7 @@ func RunSession(
 		activeConn = &obfsDirectConn{
 			relay:      relay,
 			peer:       peer,
-			wrapKey:    tp.WrapKey,
+			aead:       tp.WrapAEAD,
 			cfg:        obfsCfg,
 			writeState: obfsWriteState,
 		}
@@ -347,7 +348,7 @@ func RunSession(
 						log.Printf("[SESSION #%d] OBFS unwrap: unexpected packet (n=%d)", sessionID, n)
 						continue
 					}
-					m, wrapErr := obfsUnwrapPacket(tp.WrapKey, payload, plain)
+					m, wrapErr := obfsUnwrapPacket(tp.WrapAEAD, payload, plain)
 					if wrapErr != nil {
 						log.Printf("[SESSION #%d] OBFS unwrap: %v (n=%d)", sessionID, wrapErr, n)
 						continue
@@ -376,7 +377,7 @@ func RunSession(
 				out := b[:n]
 				if useWrap {
 					if dtlsObfsCfg != nil && obfsWriteState != nil {
-						wrapped, wrapErr := obfsWrapPacket(tp.WrapKey, out, dtlsObfsCfg, obfsWriteState)
+						wrapped, wrapErr := obfsWrapPacket(tp.WrapAEAD, out, dtlsObfsCfg, obfsWriteState)
 						if wrapErr != nil {
 							log.Printf("[SESSION #%d] OBFS wrap: %v", sessionID, wrapErr)
 							return
@@ -779,7 +780,7 @@ func RunPing(
 	var relayWg sync.WaitGroup
 	relayWg.Add(2)
 
-	useWrap := len(tp.WrapKey) == wrapKeyLen
+	useWrap := tp.WrapAEAD != nil
 	var obfsCfg *ObfsConfig
 	var obfsWriteState *ObfsState
 	if useWrap {
@@ -803,7 +804,7 @@ func RunPing(
 				if !obfsIsRTPPacket(payload) {
 					continue
 				}
-				m, err := obfsUnwrapPacket(tp.WrapKey, payload, plain)
+				m, err := obfsUnwrapPacket(tp.WrapAEAD, payload, plain)
 				if err != nil {
 					continue
 				}
@@ -825,7 +826,7 @@ func RunPing(
 			}
 			out := b[:n]
 			if useWrap {
-				wrapped, err := obfsWrapPacket(tp.WrapKey, out, obfsCfg, obfsWriteState)
+				wrapped, err := obfsWrapPacket(tp.WrapAEAD, out, obfsCfg, obfsWriteState)
 				if err != nil {
 					return
 				}
