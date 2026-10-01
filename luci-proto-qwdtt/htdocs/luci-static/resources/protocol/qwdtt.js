@@ -410,20 +410,20 @@ return network.registerProtocol('qwdtt', {
 		   and all, which is how a tunnel came to be created with no table and
 		   refused for the want of one. The value is seeded instead, as a
 		   staged change the editor shows like any other. */
-		/* RAW-IP only: a wireguard-mode tunnel needs no table, and seeding
-		   one gave it a LAN rule that nothing then took away. */
-		if (uci.get('network', s.section, 'mode') != 'wireguard' &&
-		    !uci.get('network', s.section, 'ip4table')) {
+		if (!uci.get('network', s.section, 'ip4table')) {
 			var seeded = freeTable();
 
 			uci.set('network', s.section, 'ip4table', seeded);
-			/* The same visit is the only one at which a tunnel is known to have
-			   no routing of its own yet, so it is where both routing flags get
-			   to start on. Carrying the LAN is what a tunnel is added for, and a
-			   tunnel that releases it to the WAN the moment it drops is a
-			   surprise rather than a convenience. Either is one click off. */
-			addLanRule(s.section, seeded);
-			addKillswitch(s.section, seeded);
+			/* This visit is the only one at which a tunnel is known to have
+			   no routing yet, so it is where both flags start on - either is
+			   one click off. Not for a wireguard-mode tunnel, which carries
+			   nothing: a rule at its table would send the LAN at a table
+			   whose one route refuses everything. Its table is still seeded,
+			   being inert there and wanted the moment it becomes rawtun. */
+			if (uci.get('network', s.section, 'mode') != 'wireguard') {
+				addLanRule(s.section, seeded);
+				addKillswitch(s.section, seeded);
+			}
 		}
 
 		/* First, because it decides what the rest of the tab means: in
@@ -447,13 +447,6 @@ return network.registerProtocol('qwdtt', {
 			if (value == 'wireguard') {
 				dropSection(section_id + '_rule');
 				dropSection(section_id + '_killswitch');
-			} else if (!uci.get('network', section_id, 'ip4table')) {
-				/* The other way needs one: the seed above leaves a
-				   wireguard-mode tunnel alone, so switching it here is where
-				   it first wants a table, and without one the handler refuses
-				   what it has just become. The two routing flags are the
-				   operator's to tick; only the table is not optional. */
-				uci.set('network', section_id, 'ip4table', freeTable());
 			}
 			return form.ListValue.prototype.write.apply(this, arguments);
 		};

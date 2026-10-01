@@ -464,16 +464,19 @@ function check(what, got, want) {
 
 	load(uci, { defaultroute: '1', ip4table: null });
 
-	check('opening a wireguard tunnel seeds no table, rule or kill switch',
-		[ uci.get('network', 'qwdtt0', 'ip4table'),
-		  uci.get('network', 'qwdtt0_rule'),
+	check('opening a wireguard tunnel seeds no rule and no kill switch',
+		[ uci.get('network', 'qwdtt0_rule'),
 		  uci.get('network', 'qwdtt0_killswitch') ],
-		[ null, null, null ]);
+		[ null, null ]);
+	// The table is seeded even so: inert for a tunnel that routes nothing,
+	// and wanted the moment the mode changes, where nothing else would add
+	// it in time - an ip4table widget that renders empty is parsed away.
+	check('and seeds the table anyway, for the mode it may become',
+		uci.get('network', 'qwdtt0', 'ip4table') != null, true);
 }
 
-// Switching it back is where it first needs one, and nothing else would give
-// it a table: the seed above has stepped aside and the handler refuses a
-// rawtun tunnel without one.
+// And switching it back finds the table already there, which is the point of
+// seeding it: the handler refuses a rawtun tunnel without one.
 {
 	const uci = makeUci();
 	uci.add('network', 'interface', 'qwdtt0');
@@ -483,7 +486,7 @@ function check(what, got, want) {
 	const opts = load(uci, { defaultroute: '1', ip4table: null });
 	opts.mode.write('qwdtt0', 'rawtun');
 
-	check('switching a wireguard tunnel to rawtun gives it a table',
+	check('switching a wireguard tunnel to rawtun leaves it with a table',
 		uci.get('network', 'qwdtt0', 'ip4table') != null, true);
 }
 
