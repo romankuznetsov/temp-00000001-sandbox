@@ -286,6 +286,28 @@ func main() {
 		log.Fatalf("[CLIENT] Error reading vk-creds-file: %v", err)
 	}
 
+	// Before the hash check below, not after it: that check exits without
+	// reaching the rest of main, and it talks to VK. Left later, it asked
+	// with the built-in application pair while the tunnel it is checking for
+	// would use the replacement, so it could report an authentication
+	// failure the connection never meets.
+	if *connPassword == "" {
+		*connPassword = os.Getenv("QWDTT_PASSWORD")
+	}
+	if *vkClientID == "" {
+		*vkClientID = os.Getenv("QWDTT_VK_CLIENT_ID")
+	}
+	if *vkClientSecret == "" {
+		*vkClientSecret = os.Getenv("QWDTT_VK_CLIENT_SECRET")
+	}
+	if (*vkClientID == "") != (*vkClientSecret == "") {
+		log.Fatal("[CLIENT] -vk-client-id and -vk-client-secret go together")
+	}
+	if *vkClientID != "" {
+		vkCredentialsList = []VKCredentials{{ClientID: *vkClientID, ClientSecret: *vkClientSecret}}
+		log.Printf("[CLIENT] VK application %s, from the configuration", *vkClientID)
+	}
+
 	hashes := ParseHashes(*vkHash)
 	if *checkHashes {
 		if len(hashes) == 0 {
@@ -316,26 +338,6 @@ func main() {
 
 	if len(hashes) == 0 {
 		log.Fatal("[CLIENT] No VK hashes")
-	}
-
-	// /proc/<pid>/cmdline is readable by everyone on the router and
-	// /proc/<pid>/environ by root alone, and the password used to be in the
-	// readable one. The flags stay for a client started by hand.
-	if *connPassword == "" {
-		*connPassword = os.Getenv("QWDTT_PASSWORD")
-	}
-	if *vkClientID == "" {
-		*vkClientID = os.Getenv("QWDTT_VK_CLIENT_ID")
-	}
-	if *vkClientSecret == "" {
-		*vkClientSecret = os.Getenv("QWDTT_VK_CLIENT_SECRET")
-	}
-	if (*vkClientID == "") != (*vkClientSecret == "") {
-		log.Fatal("[CLIENT] -vk-client-id and -vk-client-secret go together")
-	}
-	if *vkClientID != "" {
-		vkCredentialsList = []VKCredentials{{ClientID: *vkClientID, ClientSecret: *vkClientSecret}}
-		log.Printf("[CLIENT] VK application %s, from the configuration", *vkClientID)
 	}
 
 	if *connPassword == "" {
