@@ -368,7 +368,16 @@ return network.registerProtocol('qwdtt', {
 		/* Everything this protocol adds goes on one tab of its own. The
 		   interface editor's own tabs are declared before this runs, so it
 		   lands last, after DHCP Server. */
-		s.tab('qwdtt', _('qWDTT'));
+		/* Only once. The interface editor can call this a second time against
+		   a section that already carries the tab - open one qWDTT interface,
+		   close it, open another - and form.js answers a repeat declaration
+		   by throwing "Tab already declared", which reaches the operator as
+		   an unspecified error and an editor that will not open. The stock
+		   wireguard protocol wraps the same call in a bare try; asking
+		   whether the tab is there says what is going on and still lets a
+		   real error through. */
+		if (!s.tabs || !s.tabs['qwdtt'])
+			s.tab('qwdtt', _('qWDTT'));
 
 		/* The section name is the TUN device the client creates, so it has to
 		   be a name the kernel takes. Nothing else in the editor says so, and

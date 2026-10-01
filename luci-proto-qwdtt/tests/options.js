@@ -58,7 +58,16 @@ function load(uci, formvalues) {
 	const opts = {};
 	const section = {
 		section: 'qwdtt0',
-		tab() {},
+		// As form.js does it: a second declaration of the same tab throws,
+		// which is what the interface editor hit when one qWDTT interface was
+		// opened after another. A no-op stub here could not have caught it.
+		tabs: null,
+		tab(name, title) {
+			if (this.tabs && this.tabs[name])
+				throw 'Tab already declared';
+			this.tabs = this.tabs || {};
+			this.tabs[name] = { name, title };
+		},
 		formvalue(sid, name) { return formvalues[name]; },
 		taboption(tab, type, name, title, desc) {
 			const o = {
@@ -282,6 +291,54 @@ function check(what, got, want) {
 		check('the worker ceiling falls back to the saved hashes when the field is absent',
 			opts.workers.validate('qwdtt0', '108'), true);
 	}
+}
+
+// --- the editor may render the same section twice -------------------------
+// Open one qWDTT interface, close it, open another: the editor comes back
+// with a section that already carries the tab, and form.js throws on a
+// repeat declaration. What the operator saw was "Tab already declared" and
+// an editor that would not open.
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+
+	const opts = {};
+	const section = {
+		section: 'qwdtt0',
+		tabs: null,
+		tab(name, title) {
+			if (this.tabs && this.tabs[name])
+				throw 'Tab already declared';
+			this.tabs = this.tabs || {};
+			this.tabs[name] = { name, title };
+		},
+		formvalue() { return null; },
+		taboption(tab, type, name, title, desc) {
+			const o = { enabled: '1', disabled: '0', section, optName: name,
+			            title, description: desc, value() {}, depends() {} };
+			opts[name] = o;
+			return o;
+		}
+	};
+	const form = {};
+	[ 'Flag', 'Value', 'ListValue', 'DynamicList' ].forEach(k => {
+		form[k] = function() {};
+		form[k].prototype = { write() {}, renderWidget() { return {}; } };
+	});
+	const network = { registerErrorCode() {}, registerProtocol(name, proto) { return proto; } };
+	const fn = new Function('form', 'network', 'uci', 'ui', 'L', '_', 'E',
+		fs.readFileSync(SRC, 'utf8'));
+	const proto = fn(form, network, uci, {}, { resource: () => '' }, s => s, () => ({}));
+
+	let err = null;
+	try {
+		proto.renderFormOptions.call({ sid: 'qwdtt0' }, section);
+		proto.renderFormOptions.call({ sid: 'qwdtt0' }, section);
+	} catch (e) {
+		err = String(e);
+	}
+	check('rendering the same section twice does not throw', err, null);
 }
 
 // --- nothing here opens a dialog -------------------------------------------
