@@ -359,8 +359,16 @@ func TestLexJSOfIsAKeywordOnlyInAForOf(t *testing.T) {
 			t.Errorf("%s: %d regexes, want 0 - of is a variable here", src, n)
 		}
 	}
-	if n := regexes("for (const m of /a+/g.exec(s)) {}"); n != 1 {
-		t.Errorf("for-of over a literal regex: %d regexes, want 1", n)
+	// A binding can also be a destructuring pattern, which ends in a bracket
+	// rather than a name.
+	for _, src := range []string{
+		"for (const m of /a+/g.exec(s)) {}",
+		"for (const [m] of /a+/g.exec(s)) {}",
+		"for (const {m} of /a+/g.exec(s)) {}",
+	} {
+		if n := regexes(src); n != 1 {
+			t.Errorf("%s: %d regexes, want 1", src, n)
+		}
 	}
 }
 

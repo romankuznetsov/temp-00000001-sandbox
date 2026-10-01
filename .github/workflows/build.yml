@@ -139,20 +139,18 @@ jobs:
           fi
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
 
-          # A release/v* branch is meant to carry one thing: PKG_VERSION in
-          # both Makefiles, which Bump version has already checked is x.y.z
-          # and which the version job checks again before publishing. Building
-          # it here spent about 18 minutes reproving that, and the release the
-          # merge starts rebuilds all of it anyway.
-          #
-          # Asked of the diff rather than of the branch name. The name is only
-          # a convention, and anything else riding on such a branch would have
-          # skipped every check that would have caught it.
+          # A version bump is reproved by the version job and rebuilt by the
+          # release the merge starts, so building it here spent 18 minutes for
+          # nothing. Asked of the diff, not the branch name: the name is a
+          # convention, and anything else riding on one would skip every check.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             case "$HEAD_REF" in
             release/v*)
+              # || true, because grep -c exits 1 when it counts nothing, and
+              # the step runs under bash -e: the one case this gate exists for
+              # would have failed the job instead of taking the fast path.
               others=$(echo "$changed" |
-                grep -vE '^(qwdtt-client|luci-proto-qwdtt)/Makefile$' | grep -c .)
+                grep -vE '^(qwdtt-client|luci-proto-qwdtt)/Makefile$' | grep -c . || true)
               if [ "$others" = 0 ]; then
                 echo "version bump only; the release after the merge builds it"
                 echo "code=false" >> "$GITHUB_OUTPUT"

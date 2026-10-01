@@ -89,12 +89,16 @@ func lexJS(src string) []jsToken {
 					return false
 				}
 			}
-			// Everything else in the set is a reserved word and cannot name a
-			// variable. "of" can, and a minifier may well produce one, so it
-			// counts as the keyword only where the for-of that gives it that
-			// meaning puts it: straight after the loop variable.
+			// "of" is the one entry that can also be a variable name, so it
+			// is the keyword only after a binding: a name, or the close of a
+			// destructuring pattern.
 			if last.Val == "of" {
-				return len(toks) >= 2 && toks[len(toks)-2].Kind == jsTIdent
+				if len(toks) < 2 {
+					return false
+				}
+				p := toks[len(toks)-2]
+				return p.Kind == jsTIdent ||
+					(p.Kind == jsTPunct && (p.Val == "]" || p.Val == "}"))
 			}
 			return jsRegexPrecKw[last.Val]
 		case jsTNumber, jsTString, jsTTemplate, jsTRegex:

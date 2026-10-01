@@ -246,10 +246,8 @@ func reportNetifdWorkers(active int) {
 	}
 	line := fmt.Sprintf("%d %d %d %d\n", active, netifdWorkerSlots,
 		netifdReconnects, netifdConnectedAt)
-	// Written under the lock that built it. Released first, two goroutines
-	// could build in one order and write in the other, leaving the file on
-	// the older figure until something changed again, which on a steady
-	// tunnel is never.
+	// Under the lock that built it: released first, two goroutines could
+	// write in the order they did not build in, and the older line would win.
 	writeNetifdRunFile("workers", line)
 	netifdSessionMu.Unlock()
 }

@@ -471,6 +471,22 @@ function check(what, got, want) {
 		[ null, null, null ]);
 }
 
+// Switching it back is where it first needs one, and nothing else would give
+// it a table: the seed above has stepped aside and the handler refuses a
+// rawtun tunnel without one.
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+	uci.set('network', 'qwdtt0', 'mode', 'wireguard');
+
+	const opts = load(uci, { defaultroute: '1', ip4table: null });
+	opts.mode.write('qwdtt0', 'rawtun');
+
+	check('switching a wireguard tunnel to rawtun gives it a table',
+		uci.get('network', 'qwdtt0', 'ip4table') != null, true);
+}
+
 // --- a WireGuard tunnel writes no routing ----------------------------------
 // It adds no route of its own, so a rule steering the lan at its table finds
 // nothing there - and with the kill switch, that table's only route refuses

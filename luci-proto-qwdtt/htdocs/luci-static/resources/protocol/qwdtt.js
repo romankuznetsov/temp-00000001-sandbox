@@ -410,13 +410,8 @@ return network.registerProtocol('qwdtt', {
 		   and all, which is how a tunnel came to be created with no table and
 		   refused for the want of one. The value is seeded instead, as a
 		   staged change the editor shows like any other. */
-		/* Only a RAW-IP tunnel. A wireguard-mode one needs no table - the
-		   handler asks for one only in rawtun mode - so a tunnel made over
-		   uci usually has none, and seeding on sight staged a table, a LAN
-		   rule and a kill switch for it. The routing flags depend on rawtun,
-		   so they sit inactive and do not take them away again, and the mode
-		   write handler only runs when the mode changes. Saving then pointed
-		   the LAN at a table whose one route refuses everything. */
+		/* RAW-IP only: a wireguard-mode tunnel needs no table, and seeding
+		   one gave it a LAN rule that nothing then took away. */
 		if (uci.get('network', s.section, 'mode') != 'wireguard' &&
 		    !uci.get('network', s.section, 'ip4table')) {
 			var seeded = freeTable();
@@ -452,6 +447,13 @@ return network.registerProtocol('qwdtt', {
 			if (value == 'wireguard') {
 				dropSection(section_id + '_rule');
 				dropSection(section_id + '_killswitch');
+			} else if (!uci.get('network', section_id, 'ip4table')) {
+				/* The other way needs one: the seed above leaves a
+				   wireguard-mode tunnel alone, so switching it here is where
+				   it first wants a table, and without one the handler refuses
+				   what it has just become. The two routing flags are the
+				   operator's to tick; only the table is not optional. */
+				uci.set('network', section_id, 'ip4table', freeTable());
 			}
 			return form.ListValue.prototype.write.apply(this, arguments);
 		};
