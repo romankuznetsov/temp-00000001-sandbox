@@ -201,9 +201,12 @@ jobs:
         working-directory: client
         run: go vet -tags=openwrt ./...
 
+      # -short skips the one test that resolves login.vk.ru over live DoH,
+      # which made a unit gate depend on three resolvers and on VK answering.
+      # It still runs without the flag, for anyone who wants that check.
       - name: test
         working-directory: client
-        run: go test -tags=openwrt ./...
+        run: go test -tags=openwrt -short ./...
 
       # The protocol handler decides what the client is started with and
       # which configurations are refused, the conversion runs once on a router
