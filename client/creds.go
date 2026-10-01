@@ -21,6 +21,7 @@ import (
 	tlsclient "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/google/uuid"
+	"github.com/pion/stun/v3"
 )
 
 // ─── VK Credential Sets (2 stable app_id with rotating fallback) ───
@@ -174,13 +175,20 @@ func cloneStringSlice(in []string) []string {
 	return out
 }
 
+// Whether a TURN failure means the credentials are bad. The relay's own answer
+// comes typed - see stunErrorCode - and is asked first; the text matches
+// behind it cover pion's own wording for the same conditions, and none of
+// them is a string a port number can contain.
 func isAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
+	switch stunErrorCode(err) {
+	case stun.CodeUnauthorized, stun.CodeStaleNonce:
+		return true
+	}
 	errStr := err.Error()
-	return strings.Contains(errStr, "401") ||
-		strings.Contains(errStr, "Unauthorized") ||
+	return strings.Contains(errStr, "Unauthorized") ||
 		strings.Contains(errStr, "authentication") ||
 		strings.Contains(errStr, "invalid credential") ||
 		strings.Contains(errStr, "stale nonce")

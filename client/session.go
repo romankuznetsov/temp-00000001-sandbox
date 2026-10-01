@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"github.com/pion/dtls/v3"
 	"github.com/pion/dtls/v3/pkg/crypto/selfsign"
 	"github.com/pion/logging"
+	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4/stdnet"
 	"github.com/pion/turn/v5"
 )
@@ -140,6 +142,33 @@ func (l *pionLogger) Errorf(f string, a ...any) {
 type connectedUDPConn struct{ *net.UDPConn }
 
 func (c *connectedUDPConn) WriteTo(p []byte, _ net.Addr) (int, error) { return c.Write(p) }
+
+// The STUN error code behind a failed TURN request, or 0 when the failure
+// was not an error response from the relay at all.
+//
+// Read from the typed error pion returns rather than looked for in its text.
+// "401" and "486" are also three consecutive digits of an ephemeral port, and
+// a plain timeout on port 54011 used to count as an authentication failure -
+// which invalidated the credential cache and cost a fresh VK fetch, on the
+// shared app credentials VK rate-limits, over a packet that was merely lost.
+func stunErrorCode(err error) stun.ErrorCode {
+	var turnErr *stun.TurnError
+	if errors.As(err, &turnErr) {
+		return turnErr.ErrorCodeAttr.Code
+	}
+	return 0
+}
+
+// Whether the relay refused for quota. Its own code, not its text: 486 is
+// three digits an ephemeral port can contain, and a timeout read as quota put
+// the retry on the 30-60s quota delay instead of the usual 5-15s.
+func isQuotaRefusal(err error) bool {
+	if err == nil {
+		return false
+	}
+	return stunErrorCode(err) == stun.CodeAllocQuotaReached ||
+		strings.Contains(err.Error(), "Quota")
+}
 
 // dialTURNConn opens a socket to the TURN server and wraps it in the
 // net.PacketConn that turn.ClientConfig.Conn expects. UDP by default (as
@@ -281,8 +310,7 @@ func RunSession(
 		if isAuthError(err) {
 			handleAuthError(creds.CacheStreamID)
 		}
-		errStr := err.Error()
-		if strings.Contains(errStr, "Quota") || strings.Contains(errStr, "486") {
+		if isQuotaRefusal(err) {
 			return false, fmt.Errorf("TURN quota: %w", err)
 		}
 		return false, fmt.Errorf("TURN Allocate: %w", err)

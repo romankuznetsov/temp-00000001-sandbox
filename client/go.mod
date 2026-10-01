@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pion/dtls/v3 v3.1.5
 	github.com/pion/logging v0.2.4
+	github.com/pion/stun/v3 v3.1.6
 	github.com/pion/transport/v4 v4.0.2
 	github.com/pion/turn/v5 v5.0.12
 	golang.org/x/crypto v0.54.0
@@ -28,7 +29,6 @@ require (
 	github.com/google/btree v1.1.2 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/stun/v3 v3.1.6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/tam7t/hpkp v0.0.0-20160821193359-2b70b4024ed5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
