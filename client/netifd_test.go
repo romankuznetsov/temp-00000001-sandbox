@@ -80,23 +80,41 @@ func TestNetifdErrorCode(t *testing.T) {
 // matter: probing a tunnel that is delivering is waste, and giving up on one
 // whose server never answered a probe is worse than the fault.
 func TestNetifdWatchAction(t *testing.T) {
+	const young = time.Minute        // inside the arming window
+	const old = 10 * time.Minute     // past it
+	const busy = time.Second         // traffic is arriving
+	const quiet = netifdStallTimeout // nothing has arrived for a long time
+
 	tests := []struct {
 		name     string
 		idle     time.Duration
+		age      time.Duration
 		answered bool
 		probe    bool
 		giveUp   bool
 	}{
-		{"a tunnel that is delivering is left alone", time.Second, true, false, false},
-		{"and still left alone just short of the probe", netifdProbeAfter - time.Second, true, false, false},
-		{"quiet for a while, so poke it", netifdProbeAfter, false, true, false},
-		{"quiet past the timeout, but it never answered a probe", netifdStallTimeout, false, true, false},
-		{"quiet past the timeout and it used to answer", netifdStallTimeout, true, true, true},
-		{"long past it", time.Hour, true, true, true},
+		// Before the server has answered, the probe goes out whatever the
+		// tunnel is doing. This is the case a router got wrong: a tunnel
+		// carrying traffic was never probed, so when it died there was
+		// nothing to tell a dead server from one that ignores echoes.
+		{"working but not yet armed, ask anyway", busy, young, false, true, false},
+		{"quiet and not yet armed, ask", quiet, young, false, true, false},
+
+		// Once the window closes with no answer, this server does not answer
+		// echoes. Stop asking, and never act on silence.
+		{"never answered, window closed", quiet, old, false, false, false},
+		{"never answered, window closed, still quiet later", time.Hour, old, false, false, false},
+
+		// Armed.
+		{"delivering, leave it alone", busy, old, true, false, false},
+		{"just short of the probe", netifdProbeAfter - time.Second, old, true, false, false},
+		{"quiet enough to poke", netifdProbeAfter, old, true, true, false},
+		{"quiet past the timeout, give up", quiet, old, true, true, true},
+		{"long past it", time.Hour, old, true, true, true},
 	}
 
 	for _, tc := range tests {
-		probe, giveUp := netifdWatchAction(tc.idle, tc.answered)
+		probe, giveUp := netifdWatchAction(tc.idle, tc.age, tc.answered)
 		if probe != tc.probe || giveUp != tc.giveUp {
 			t.Errorf("%s: got probe=%v giveUp=%v, want probe=%v giveUp=%v",
 				tc.name, probe, giveUp, tc.probe, tc.giveUp)
