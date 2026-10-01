@@ -21,13 +21,21 @@ PKG_LICENSE:=GPL-3.0-or-later
 
 include $(INCLUDE_DIR)/package.mk
 
+# kmod-wireguard and wireguard-tools are for the tunnel's wireguard mode, and
+# nothing in this package calls either: in that mode the client is a relay on
+# a local UDP port, and what carries the traffic is a separate WireGuard
+# interface the operator points at it. Depended on rather than left to be
+# installed by hand because the mode does nothing at all without one, and the
+# missing piece is on the other interface, where a router that has never had
+# WireGuard gives no hint that this is what is wrong. wireguard-tools is what
+# ships the netifd protocol for it, not just wg(8).
 define Package/qwdtt-client
   SECTION:=net
   CATEGORY:=Network
   SUBMENU:=VPN
   TITLE:=qWDTT tunnel client
   URL:=https://github.com/romankuznetsov/qwdtt-openwrt
-  DEPENDS:=+ca-bundle +kmod-tun +ip-full
+  DEPENDS:=+ca-bundle +kmod-tun +ip-full +kmod-wireguard +wireguard-tools
 endef
 
 define Package/qwdtt-client/description
@@ -61,6 +69,7 @@ define Package/qwdtt-client/install
 	$(INSTALL_DIR) $(1)/lib/netifd/proto
 	$(INSTALL_BIN) ./files/qwdtt.sh $(1)/lib/netifd/proto/qwdtt.sh
 	$(INSTALL_BIN) ./files/qwdtt-up.sh $(1)/lib/netifd/qwdtt-up.sh
+	$(INSTALL_BIN) ./files/qwdtt-relay-up.sh $(1)/lib/netifd/qwdtt-relay-up.sh
 	$(INSTALL_BIN) ./files/qwdtt-error.sh $(1)/lib/netifd/qwdtt-error.sh
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	# Before the firewall one, so the zone's network list sees the interfaces

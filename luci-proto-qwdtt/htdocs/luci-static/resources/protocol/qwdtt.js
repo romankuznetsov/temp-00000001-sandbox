@@ -197,6 +197,16 @@ function tableOf(section_id) {
 	return uci.get('network', section_id, 'ip4table') || '';
 }
 
+/* ---- the two shapes a tunnel comes in ------------------------------------
+   Kept in step with QWDTT_PEER_PORT_* and proto_qwdtt_setup in the protocol
+   handler, which is what actually applies them. */
+var PEER_PORT = { rawtun: '56003', wireguard: '56000' };
+var RELAY_PORT = '9000';
+
+function modeOf(section_id) {
+	return uci.get('network', section_id, 'mode') || 'rawtun';
+}
+
 /* The lowest table nothing else has claimed. 51820 is where the client's own
    default sat, so a router with one tunnel keeps the number it already had. */
 function freeTable() {
@@ -297,10 +307,15 @@ function dropSection(name) {
 	[ 'MISSING_PEER_HOST',      _('No server address is set') ],
 	[ 'MISSING_HASH',           _('No VK call hash is set') ],
 	[ 'MISSING_PASSWORD',       _('No connection password is set') ],
-	[ 'NAME_TOO_LONG',          _('Interface name longer than 15 characters (the TUN device limit)') ],
+	[ 'NAME_TOO_LONG',          _('Interface name longer than 15 characters (the device name limit)') ],
 	[ 'MISSING_IP4TABLE',       _('No routing table (ip4table) set; the tunnel needs its own') ],
 	[ 'MISSING_DEVICE_ID',      _('No device ID is set') ],
+	[ 'INVALID_MODE',           _('Mode must be either rawtun or wireguard') ],
+	[ 'NO_RELAY_DEVICE',        _('The placeholder device for this tunnel could not be created') ],
 	[ 'DUPLICATE_DEVICE_ID',    _('Another qWDTT interface already uses this device ID') ],
+	[ 'DUPLICATE_LISTEN_PORT',  _('Another qWDTT tunnel already uses this local endpoint port') ],
+	[ 'UNREADABLE_CONFIG_FILE', _('The client config file set here cannot be read') ],
+	[ 'QWDTT_LISTEN_FAILED',    _('The relay could not open its local endpoint') ],
 	[ 'QWDTT_WRONG_PASSWORD',   _('The server rejected the connection password') ],
 	[ 'QWDTT_PASSWORD_EXPIRED', _('The connection password has expired') ],
 	[ 'QWDTT_DEVICE_MISMATCH',  _('Password is bound to another device ID: use a separate one') ],
@@ -382,7 +397,9 @@ return network.registerProtocol('qwdtt', {
 
 		/* The section name is the TUN device the client creates, so it has to
 		   be a name the kernel takes. Nothing else in the editor says so, and
-		   the protocol handler's refusal arrives only after Save & Apply. */
+		   the protocol handler's refusal arrives only after Save & Apply. In
+		   WireGuard mode it is the placeholder device instead, and the kernel
+		   takes fifteen characters for that too. */
 		if (s.section.length > 15)
 			s.description = _('This interface name is longer than 15 characters, so the tunnel cannot come up: the name is also the TUN device, and the kernel takes 15.');
 
@@ -406,6 +423,31 @@ return network.registerProtocol('qwdtt', {
 			addKillswitch(s.section, seeded);
 		}
 
+		/* First, because it decides what the rest of the tab means: in
+		   WireGuard mode this interface has no device, no address and no
+		   routes, so the routing flags below go away with it. */
+		o = s.taboption('qwdtt', form.ListValue, 'mode', _('Mode'),
+			withDefault('rawtun', _('rawtun makes this interface the tunnel: the server assigns its address and the LAN can be routed into it. wireguard makes it a transport only - the client relays a local UDP port to the WireGuard listener of the server through the VK call, and an ordinary WireGuard interface pointed at that port carries the traffic, holding the keys, the addresses and the routing.')));
+		o.value('rawtun', 'rawtun');
+		o.value('wireguard', 'wireguard');
+		o.default = 'rawtun';
+
+		/* The routing below is declared with depends('mode', 'rawtun'), and
+		   going inactive is not enough to take it away: an inactive option is
+		   only removed when it has rmempty, which those two clear on purpose.
+		   So the switch does it, here, where the two sections are known to have
+		   stopped describing anything - a rule pointing at a table this tunnel
+		   no longer fills, and an unreachable route that is then the only thing
+		   in it. Declared before them, so their own write cannot put them
+		   back. */
+		o.write = function(section_id, value) {
+			if (value == 'wireguard') {
+				dropSection(section_id + '_rule');
+				dropSection(section_id + '_killswitch');
+			}
+			return form.ListValue.prototype.write.apply(this, arguments);
+		};
+
 		/* host(1) rather than host(): the protocol handler builds the client's
 		   -peer as host:port with no brackets, so an IPv6 literal would not
 		   survive the concatenation. */
@@ -414,10 +456,19 @@ return network.registerProtocol('qwdtt', {
 		o.datatype = 'host(1)';
 		o.rmempty = false;
 
+		/* No placeholder, unlike every other field here: the default is not one
+		   value but one per mode, and a box showing the other mode's port would
+		   be worse than a box showing none. */
 		o = s.taboption('qwdtt', form.Value, 'peer_port', _('Peer port'),
-			withDefault('56003', _('UDP port of the server RAW listener.')));
+			_('UDP port of the server listener: %s for the RAW one, %s for WireGuard. Left empty, the port the mode calls for is used.')
+				.format(PEER_PORT.rawtun, PEER_PORT.wireguard));
 		o.datatype = 'port';
-		o.placeholder = '56003';
+
+		o = s.taboption('qwdtt', form.Value, 'listen_port', _('Local endpoint port'),
+			withDefault(RELAY_PORT, _('UDP port on 127.0.0.1 the relay listens on. This is the endpoint a WireGuard interface is pointed at, as its peer. Each tunnel needs its own: two relays cannot share a port, and the second to start exits saying so.')));
+		o.datatype = 'port';
+		o.placeholder = RELAY_PORT;
+		o.depends('mode', 'wireguard');
 
 		o = s.taboption('qwdtt', form.Value, 'device_id', _('Device ID'),
 			_('Identifies this tunnel to the server, which knows it by this and nothing else. Two tunnels that share one are a single device to it and it disconnects them in turn, so each needs its own.'));
@@ -607,10 +658,18 @@ return network.registerProtocol('qwdtt', {
 			return true;
 		};
 
+		/* Both routing flags are RAW-IP only, and not merely as a tidiness: a
+		   WireGuard-mode interface adds no route of its own, so a rule steering
+		   the LAN at its table would find nothing there - and with the kill
+		   switch on, that table's only route refuses everything. The LAN would
+		   be black-holed by a tunnel that is working. Going inactive is what
+		   removes the two sections, which is also how switching an existing
+		   tunnel over takes its old routing with it. */
 		o = s.taboption('qwdtt', form.Flag, '_lanroute',
 			_('Route LAN client traffic through this tunnel'),
 			withDefault(_('on'), _('Writes an ordinary routing rule sending traffic from the lan interface to the routing table of this tunnel. Edit it afterwards on Network -> Routing - to send one client or one destination instead of the whole LAN, narrow it there and it stays narrowed; only the table it looks up is kept in step from here.')));
 		o.rmempty = false;
+		o.depends('mode', 'rawtun');
 		/* So that a table changed under Advanced Settings is carried into the
 		   rule, which is otherwise left pointing at the old one. */
 		o.forcewrite = true;
@@ -656,6 +715,7 @@ return network.registerProtocol('qwdtt', {
 			withDefault(_('on'), _('Writes an unreachable default route into the routing table of this tunnel, so traffic sent there is refused rather than released to the WAN whenever the tunnel is not up. Independent of the rule above: it covers whatever looks up that table, including a rule written by hand.')));
 		o.rmempty = false;
 		o.forcewrite = true;
+		o.depends('mode', 'rawtun');
 
 		o.cfgvalue = function(section_id) {
 			return uci.get('network', section_id + '_killswitch') != null
@@ -712,8 +772,12 @@ return network.registerProtocol('qwdtt', {
 		o.value('legacy', 'legacy');
 		o.default = 'vkcalls';
 
+		/* The port matters as much as the flag and is easy to miss: -listen-direct
+		   is a listener of its own, not the same one without DTLS, so a tunnel
+		   left on the default port meets a listener that will not answer it and
+		   reports the timeout as a password problem. */
 		o = s.taboption('qwdtt', form.Flag, 'no_dtls', _('Disable DTLS'),
-			withDefault(_('off'), _('Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up.')));
+			withDefault(_('off'), _('Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, which is a separate listener on a port of its own - set Peer port to that port as well, or the tunnel will not come up.')));
 
 		o = s.taboption('qwdtt', form.Flag, 'turn_tcp', _('TURN over TCP'),
 			withDefault(_('off'), _('Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom.')));

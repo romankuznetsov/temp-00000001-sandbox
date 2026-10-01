@@ -88,11 +88,24 @@ proto_kill_command() { echo "killed: $1"; }
 rm() { echo "removed: $*"; }
 
 INCLUDE_ONLY=1
+# The handler asks this directory which tunnels are running. Pointed at a
+# scratch copy so the tests can say one is without a router under them.
+QWDTT_RUN_DIR=$(mktemp -d)
+# command, because rm is stubbed below to report rather than delete.
+trap 'command rm -rf "$QWDTT_RUN_DIR"' EXIT
+export QWDTT_RUN_DIR
 . ./qwdtt-client/files/qwdtt.sh
 
 # There is no /sys here, and what the checks below are about is when the device
 # is dropped rather than how it is recognised.
 drop_device() { echo "dropped: $1"; }
+
+# Nor any netlink for the placeholder a wireguard-mode tunnel is reported up
+# on: what matters here is whether it is asked for, what is done when it
+# cannot be made, and that the interface is only reported up after it exists.
+relay_device() { echo "device: $1"; }
+proto_init_update() { echo "init_update: $1"; }
+proto_send_update() { echo "send_update: $1"; }
 
 fail=0
 
@@ -110,10 +123,13 @@ check() {
 
 # --- the command line -------------------------------------------------------
 
+# The password is in the environment and nowhere on the command line:
+# /proc/<pid>/cmdline is world-readable and /proc/<pid>/environ is not.
 got=$(proto_qwdtt_setup qwdtt0 2>&1)
 want='export: INTERFACE=qwdtt0
 export: TZ=Europe/Moscow
-run: /usr/bin/qwdtt-client -netifd -mode rawtun -tun-name qwdtt0 -peer vpn1.example:56003 -vk aaa,bbb -password p1 -device-id openwrt-qwdtt0 -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls'
+export: QWDTT_PASSWORD=p1
+run: /usr/bin/qwdtt-client -netifd -mode rawtun -tun-name qwdtt0 -peer vpn1.example:56003 -vk aaa,bbb -device-id openwrt-qwdtt0 -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls'
 check "a complete tunnel" "$got" "$want"
 
 # Every default here is one the handler supplies rather than the client, so a
@@ -123,22 +139,41 @@ SECTION=work
 got=$(proto_qwdtt_setup work 2>&1)
 want='export: INTERFACE=work
 export: TZ=Europe/Moscow
-run: /usr/bin/qwdtt-client -netifd -mode rawtun -tun-name work -peer vpn2.example:56003 -vk ccc -password p2 -device-id openwrt-work -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls'
+export: QWDTT_PASSWORD=p2
+run: /usr/bin/qwdtt-client -netifd -mode rawtun -tun-name work -peer vpn2.example:56003 -vk ccc -device-id openwrt-work -n 9 -go-dns yandex -obfs audio -captcha-mode auto -vk-auth anonymous -vk-anon-path vkcalls'
 check "no peer_port falls back to 56003, and every optional value left unset" "$got" "$want"
 
 # The three that are appended rather than always passed. -notls and -turn-tcp
 # are bare flags, which Go's flag package reads as true, so passing them with a
-# 0 would switch them on.
+# 0 would switch them on. The VK application pair goes the way the password
+# does, and for the same reason.
 set_cfg work.vk_creds_file '/etc/qwdtt/creds with a space.json'
 set_cfg work.no_dtls 1
 set_cfg work.turn_tcp 0
-got=$(proto_qwdtt_setup work 2>&1 | sed -n 's/^run: //p')
+set_cfg work.vk_client_id 123456
+set_cfg work.vk_client_secret 'sekret with a space'
+got=$(proto_qwdtt_setup work 2>&1)
 case $got in
 *"-vk-anon-path vkcalls -vk-creds-file /etc/qwdtt/creds with a space.json -notls") ;;
 *)
 	echo "the optional flags:"
 	echo "--- got"
 	echo "$got"
+	fail=1 ;;
+esac
+case $got in
+*"export: QWDTT_VK_CLIENT_ID=123456"*"export: QWDTT_VK_CLIENT_SECRET=sekret with a space"*) ;;
+*)
+	echo "the VK application pair was not exported:"
+	echo "$got"
+	fail=1 ;;
+esac
+# The run line alone: the exports above it are allowed to carry them.
+run=$(echo "$got" | sed -n 's/^run: //p')
+case $run in
+*-password*|*-vk-client*|*sekret*)
+	echo "a secret reached the command line:"
+	echo "$run"
 	fail=1 ;;
 esac
 
@@ -166,8 +201,9 @@ set_cfg nohash.ip4table 51823
 set_cfg nohash.peer_host vpn3.example
 refusal "a tunnel with no hashes" nohash MISSING_HASH
 
-# The client exits without one and netifd restarts it with no backoff, so an
-# unset password is a restart storm rather than an error anyone can see.
+# Without this the client exits at once and netifd starts it again at once,
+# with no backoff and nothing on the interface page: measured at 349 starts
+# in thirty seconds.
 set_cfg nopass.proto qwdtt
 set_cfg nopass.ip4table 51827
 set_cfg nopass.peer_host vpn9.example
@@ -255,6 +291,133 @@ case $got in
 	fail=1 ;;
 esac
 
+# --- wireguard mode ---------------------------------------------------------
+
+# The other shape entirely: no TUN device of its own, a local endpoint instead,
+# and the server's main listener rather than the RAW one.
+SECTIONS="$SECTIONS wgt wgtwin"
+set_cfg wgt.proto qwdtt
+set_cfg wgt.mode wireguard
+set_cfg wgt.peer_host vpnW.example
+set_cfg wgt.password pW
+set_cfg wgt.device_id openwrt-wgt
+set_cfg wgt.hash www
+SECTION=wgt
+got=$(proto_qwdtt_setup wgt 2>&1)
+case $got in
+*"-mode vpn -listen 127.0.0.1:9000 -peer vpnW.example:56000"*) ;;
+*)
+	echo "the wireguard command line:"
+	echo "$got" | sed -n 's/^run: //p'
+	fail=1 ;;
+esac
+# In that order: the client reports the interface up once its relay is
+# listening, and netifd refuses an update naming a device that does not exist,
+# so the placeholder has to be made before the client is started.
+case $got in
+*"device: wgt"*"run: /usr/bin/qwdtt-client"*) ;;
+*)
+	echo "the placeholder was not made before the client was started:"
+	echo "$got"
+	fail=1 ;;
+esac
+
+# And the handler reports nothing up itself: it returns as soon as the client
+# is started, which says nothing about whether the relay took its port.
+case $got in
+*init_update*|*send_update*)
+	echo "the handler reported the interface up instead of leaving it to the client:"
+	echo "$got"
+	fail=1 ;;
+esac
+
+# A placeholder that cannot be made stops the setup before the client is
+# started, so there is nothing running to unwind.
+relay_device() { return 1; }
+got=$(proto_qwdtt_setup wgt 2>&1)
+relay_device() { echo "device: $1"; }
+case $got in
+*"refused: NO_RELAY_DEVICE"*) ;;
+*)
+	echo "a placeholder that could not be made was not reported: $got"
+	fail=1 ;;
+esac
+case $got in
+*"run: "*)
+	echo "the client was started despite having no placeholder to report up on:"
+	echo "$got"
+	fail=1 ;;
+esac
+
+# Two relays on one local port do not collide: SO_REUSEADDR lets the second
+# bind the address the first holds, both tunnels come up, and the packets are
+# split between them. Nothing at runtime can see that, so the configuration is
+# what has to be refused.
+set_cfg wgtwin.proto qwdtt
+set_cfg wgtwin.mode wireguard
+set_cfg wgtwin.peer_host vpnX.example
+set_cfg wgtwin.password pX
+set_cfg wgtwin.device_id openwrt-wgtwin
+set_cfg wgtwin.hash xxx
+refusal "two relays on one local port" wgtwin DUPLICATE_LISTEN_PORT
+
+# But a tunnel the operator has parked holds no port, so it must not keep a
+# running one off it: whichever starts first claims the port, and the other is
+# refused on its way up.
+set_cfg wgt.auto 0
+SECTION=wgtwin
+got=$(proto_qwdtt_setup wgtwin 2>&1 | sed -n 's/^run: //p')
+case $got in
+/usr/bin/qwdtt-client*) ;;
+*)
+	echo "a parked tunnel reserved the port against a running one: ${got:-nothing ran}"
+	fail=1 ;;
+esac
+
+# Parking one in the configuration does not stop a relay that is already
+# running, and that one does still hold the port. Taking the configuration at
+# its word let the second bind the same address - SO_REUSEADDR allows it - and
+# split the packets with nothing downstream able to see it.
+: > "$QWDTT_RUN_DIR/wgt.wg"
+refusal "a parked but still running relay keeps its port" wgtwin DUPLICATE_LISTEN_PORT
+command rm -f "$QWDTT_RUN_DIR/wgt.wg"
+
+# And the same for one switched off rather than parked.
+set_cfg wgt.auto 1
+set_cfg wgt.disabled 1
+: > "$QWDTT_RUN_DIR/wgt.workers"
+refusal "a disabled but still running relay keeps its port" wgtwin DUPLICATE_LISTEN_PORT
+command rm -f "$QWDTT_RUN_DIR/wgt.workers"
+set_cfg wgt.disabled 0
+
+set_cfg wgt.auto 1
+
+# A password in /etc/config/network reaches the client through netifd's own
+# argv and through ubus, both readable while the interface comes up. Pointing
+# at the client's own file instead leaves only the path in those places, so
+# config_file has to be accepted in place of a password rather than alongside
+# one - and refused clearly when it names a file that cannot be read, since
+# the client exits on that and netifd would restart it at once.
+set_cfg nopass.config_file "$QWDTT_RUN_DIR/creds.json"
+: > "$QWDTT_RUN_DIR/creds.json"
+SECTION=nopass
+got=$(proto_qwdtt_setup nopass 2>&1)
+case $got in
+*"run: "*"-config $QWDTT_RUN_DIR/creds.json"*) ;;
+*)
+	echo "a tunnel with a config file instead of a password did not start:"
+	echo "$got"
+	fail=1 ;;
+esac
+case $got in
+*QWDTT_PASSWORD*)
+	echo "the password was still exported when the secrets live in a file:"
+	echo "$got"
+	fail=1 ;;
+esac
+command rm -f "$QWDTT_RUN_DIR/creds.json"
+refusal "a config file that cannot be read" nopass UNREADABLE_CONFIG_FILE
+
 # --- teardown ---------------------------------------------------------------
 
 # netifd tears the protocol down and sets it up again every time the client
@@ -267,11 +430,17 @@ check "a teardown of a tunnel that still exists" "$got" "killed: qwdtt0"
 # The SNAT rule names the address the server assigned, so it is worth exactly
 # as much as the tunnel is: left behind, it would rewrite the source of
 # whatever took the device's name next.
+#
+# The run files go by glob rather than by name. Nothing here has created any,
+# so it reaches rm unexpanded, which -f makes a no-op; what is being checked
+# is that the teardown asks for all of them rather than the three it used to
+# list, two of which had since been joined by others - including the one
+# holding the WireGuard private key the server issued.
 got=$(proto_qwdtt_teardown gone 2>&1)
-check "a teardown of a section that has been deleted" "$got" 'killed: gone
+check "a teardown of a section that has been deleted" "$got" "killed: gone
 dropped: gone
-removed: -f /var/run/qwdtt/gone.counters /var/run/qwdtt/gone.workers /var/run/qwdtt/gone.relays
-deleted: firewall.gone_snat'
+removed: -f $QWDTT_RUN_DIR/gone.*
+deleted: firewall.gone_snat"
 
 # --- the option list the uci-defaults script reads --------------------------
 

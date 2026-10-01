@@ -20,6 +20,12 @@ msgstr "недопустимый символ \"%s\""
 msgid "This interface name is longer than 15 characters, so the tunnel cannot come up: the name is also the TUN device, and the kernel takes 15."
 msgstr "Имя этого интерфейса длиннее 15 символов, поэтому туннель не поднимется: имя - это еще и имя TUN-устройства, а ядро принимает 15 символов."
 
+msgid "Mode"
+msgstr "Режим"
+
+msgid "rawtun makes this interface the tunnel: the server assigns its address and the LAN can be routed into it. wireguard makes it a transport only - the client relays a local UDP port to the WireGuard listener of the server through the VK call, and an ordinary WireGuard interface pointed at that port carries the traffic, holding the keys, the addresses and the routing."
+msgstr "rawtun делает этот интерфейс самим туннелем: сервер выдает ему адрес, и в него можно направить локальную сеть. wireguard оставляет ему только роль транспорта: клиент пробрасывает локальный UDP-порт до WireGuard-слушателя сервера через звонок VK, а трафик несет обычный интерфейс WireGuard, направленный на этот порт, - ключи, адреса и маршрутизация принадлежат ему."
+
 msgid "Peer host"
 msgstr "Адрес сервера"
 
@@ -38,8 +44,14 @@ msgstr "выкл"
 msgid "on"
 msgstr "вкл"
 
-msgid "UDP port of the server RAW listener."
-msgstr "UDP-порт RAW-слушателя на сервере."
+msgid "UDP port of the server listener: %s for the RAW one, %s for WireGuard. Left empty, the port the mode calls for is used."
+msgstr "UDP-порт слушателя на сервере: %s для RAW, %s для WireGuard. Если оставить пустым, используется порт, которого требует режим."
+
+msgid "Local endpoint port"
+msgstr "Порт локальной точки подключения"
+
+msgid "UDP port on 127.0.0.1 the relay listens on. This is the endpoint a WireGuard interface is pointed at, as its peer. Each tunnel needs its own: two relays cannot share a port, and the second to start exits saying so."
+msgstr "UDP-порт на 127.0.0.1, который слушает ретранслятор. Именно на эту точку направляется интерфейс WireGuard как на свой узел. Каждому туннелю нужен свой порт: два ретранслятора не могут занять один, и второй запущенный завершится с ошибкой."
 
 msgid "Password"
 msgstr "Пароль"
@@ -134,8 +146,8 @@ msgstr "Через какую точку входа VK проходит анон
 msgid "Disable DTLS"
 msgstr "Отключить DTLS"
 
-msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, or the tunnel will not come up."
-msgstr "Прямой режим: RTP-obfs AEAD поверх TURN без DTLS. Сервер должен быть запущен с -listen-direct, иначе туннель не поднимется."
+msgid "Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, which is a separate listener on a port of its own - set Peer port to that port as well, or the tunnel will not come up."
+msgstr "Прямой режим: RTP-obfs AEAD поверх TURN без DTLS. Сервер должен быть запущен с -listen-direct: это отдельный слушатель на своем порту, поэтому в поле \"Порт сервера\" нужно указать именно его, иначе туннель не поднимется."
 
 msgid "TURN over TCP"
 msgstr "TURN через TCP"
@@ -146,20 +158,35 @@ msgstr "Подключаться к TURN по TCP вместо UDP. Обходи
 msgid "No server address is set"
 msgstr "Не задан адрес сервера"
 
-msgid "No connection password is set"
-msgstr "Не задан пароль подключения"
-
 msgid "No VK call hash is set"
 msgstr "Не задан ни один хеш звонка VK"
 
-msgid "Interface name longer than 15 characters (the TUN device limit)"
-msgstr "Имя интерфейса длиннее 15 символов (предел TUN-устройства)"
+msgid "No connection password is set"
+msgstr "Не задан пароль подключения"
+
+msgid "Interface name longer than 15 characters (the device name limit)"
+msgstr "Имя интерфейса длиннее 15 символов (предел имени устройства)"
+
+msgid "Mode must be either rawtun or wireguard"
+msgstr "Режим должен быть rawtun или wireguard"
+
+msgid "The placeholder device for this tunnel could not be created"
+msgstr "Не удалось создать устройство-заглушку для этого туннеля"
 
 msgid "No routing table (ip4table) set; the tunnel needs its own"
 msgstr "Не задана таблица маршрутизации (ip4table): туннелю нужна своя"
 
 msgid "No device ID is set"
 msgstr "Не задан идентификатор устройства"
+
+msgid "Another qWDTT tunnel already uses this local endpoint port"
+msgstr "Этот локальный порт уже занят другим туннелем qWDTT"
+
+msgid "The client config file set here cannot be read"
+msgstr "Файл настроек клиента, указанный здесь, не читается"
+
+msgid "The relay could not open its local endpoint"
+msgstr "Ретранслятор не смог открыть локальную точку подключения"
 
 msgid "Another qWDTT interface already uses this device ID"
 msgstr "Этот идентификатор устройства уже занят другим интерфейсом qWDTT"

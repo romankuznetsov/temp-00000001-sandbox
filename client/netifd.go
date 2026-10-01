@@ -25,6 +25,8 @@ const netifdUpScript = "/lib/netifd/qwdtt-up.sh"
 
 const netifdErrorScript = "/lib/netifd/qwdtt-error.sh"
 
+const netifdRelayUpScript = "/lib/netifd/qwdtt-relay-up.sh"
+
 // Shared with /lib/netifd/qwdtt-up.sh, which writes the counter baseline
 // beside these files. On tmpfs, so everything in it lasts exactly one boot,
 // which is as long as the tunnel device does.
@@ -138,6 +140,38 @@ func notifyNetifd(device, address, dnsCSV string, mtu int) error {
 	return runNativeCommandEnv(netifdUpEnv(device, address, dnsCSV, mtu), netifdUpScript)
 }
 
+// A wireguard-mode tunnel is up once the relay holds its local port, which is
+// the only thing it promises. Reported from here rather than by the protocol
+// handler: the handler returns as soon as the client is started and cannot
+// tell a relay that bound from one whose port was already taken.
+//
+// The placeholder device is named after the interface, as the TUN device of a
+// RAW-IP tunnel is.
+func notifyNetifdRelayUp() error {
+	iface := os.Getenv("INTERFACE")
+	if iface == "" {
+		return fmt.Errorf("INTERFACE is unset: -netifd only works under the qwdtt protocol handler")
+	}
+	return runNativeCommandEnv([]string{"DEVICE=" + iface}, netifdRelayUpScript)
+}
+
+// The relay could not open its local endpoint at all - an address that is not
+// ours to bind, or a port privileged against us. Not the case of another
+// relay already there: SO_REUSEADDR lets that one bind quite happily, which
+// is why the handler refuses it from the configuration instead.
+//
+// Blocked, because none of what does reach here clears on a retry, and netifd
+// would otherwise start the client again several times a second with nothing
+// on the interface page to say why.
+func notifyNetifdListenFailed() {
+	if !netifdManaged {
+		return
+	}
+	if err := runNativeCommandEnv([]string{"ERROR=QWDTT_LISTEN_FAILED"}, netifdErrorScript); err != nil {
+		log.Printf("[NETIFD] reporting QWDTT_LISTEN_FAILED: %v", err)
+	}
+}
+
 // The up-script iterates DNS unquoted, so the separator has to be whitespace.
 // Splitting rather than replacing drops the empty fields a trailing comma would
 // otherwise turn into an empty resolver.
@@ -151,6 +185,22 @@ func netifdUpEnv(device, address, dnsCSV string, mtu int) []string {
 		"DNS=" + strings.Join(servers, " "),
 		"MTU=" + strconv.Itoa(mtu),
 	}
+}
+
+// Where a WireGuard configuration the server issues is kept. The default is
+// relative to the working directory, which under netifd is /lib/netifd/proto -
+// the package's own directory, and the same file for every tunnel on the
+// router. 0600 rather than the 0644 the run files get: this one holds the
+// private key.
+func netifdWGConfPath() string {
+	iface := os.Getenv("INTERFACE")
+	if !netifdManaged || iface == "" {
+		return "wg-turn.conf"
+	}
+	if err := os.MkdirAll(netifdRunDir, 0755); err != nil {
+		return "wg-turn.conf"
+	}
+	return filepath.Join(netifdRunDir, iface+".wg")
 }
 
 func writeNetifdRunFile(suffix, content string) {
@@ -295,6 +345,18 @@ func netifdWatchAction(idle, age time.Duration, answered bool) (probe, giveUp bo
 	return true, idle >= netifdStallTimeout
 }
 
+// The same question for a wireguard-mode tunnel, which has no device to probe
+// through and needs none: WireGuard's PersistentKeepalive (25s, from the
+// config the server issues) keeps outbound traffic flowing whether or not the
+// tunnel is in use, so a stall is outbound still moving while nothing comes
+// back. received gates it the way `answered` gates the RAW-IP watch - a relay
+// that has never delivered is misconfigured rather than stalled, and giving it
+// up every five minutes fixes none of the causes. TestNetifdRelayStalled holds
+// each of these readings.
+func netifdRelayStalled(idleIn, idleOut time.Duration, received bool) bool {
+	return received && idleIn >= netifdStallTimeout && idleOut < netifdStallTimeout
+}
+
 func startNetifdTrafficWatch(ctx context.Context, cancel context.CancelFunc, stats *Stats, device string, server net.IP) {
 	if !netifdManaged || stats == nil {
 		return
@@ -327,6 +389,12 @@ func startNetifdTrafficWatch(ctx context.Context, cancel context.CancelFunc, sta
 		started := time.Now()
 		lastSeen := started
 
+		// The outbound side, which only a wireguard-mode tunnel reads: a
+		// relay with nothing pointed at it never sends, and must never be
+		// mistaken for one whose far end has stopped answering.
+		var lastSent int64
+		sentAt := lastSeen
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -344,6 +412,23 @@ func startNetifdTrafficWatch(ctx context.Context, cancel context.CancelFunc, sta
 			// Written every tick rather than only on change, so a page reading
 			// it can tell "nothing yet" from a file nobody has updated.
 			writeNetifdRunFile("traffic", fmt.Sprintf("%d %d\n", seenAt, total))
+
+			// A wireguard-mode tunnel, which is watched by what it is already
+			// carrying rather than by a probe it has no device to send. See
+			// netifdRelayStalled.
+			if device == "" {
+				if sent := stats.TotalBytesUp.Load(); sent != lastSent {
+					lastSent = sent
+					sentAt = now
+				}
+				if netifdRelayStalled(now.Sub(lastSeen), now.Sub(sentAt), total > 0) {
+					log.Printf("[NETIFD] the relay has been sending for %v with nothing coming back, giving the interface up so it is rebuilt",
+						now.Sub(lastSeen).Truncate(time.Second))
+					cancel()
+					return
+				}
+				continue
+			}
 
 			idle := now.Sub(lastSeen)
 			if probe != nil && probe.everAnswered() {

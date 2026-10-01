@@ -397,6 +397,85 @@ function check(what, got, want) {
 	check('every handler fallback was checked', seen > 0, true);
 }
 
+// --- the ports that depend on the mode, in three places --------------------
+// The peer port has no single default any more: the handler picks one by mode,
+// the protocol page names both in the hint for the field, and the status page
+// fills one in so the Peer column says where the tunnel actually goes. Three
+// copies, and nothing at runtime would notice them disagreeing - a tunnel sent
+// at a port nobody mentioned looks exactly like a server that is not there.
+{
+	const handler = fs.readFileSync('qwdtt-client/files/qwdtt.sh', 'utf8');
+	// The status page names the same ports and is checked here too once it
+	// learns about wireguard mode.
+	const PAGES = [
+		'luci-proto-qwdtt/htdocs/luci-static/resources/protocol/qwdtt.js'
+	];
+
+	const ports = {};
+	let m;
+	const re = /^QWDTT_PEER_PORT_([a-z]+)=(\d+)$/gm;
+	while ((m = re.exec(handler)) !== null)
+		ports[m[1]] = m[2];
+	check('the handler names a peer port for each mode',
+		Object.keys(ports).sort(), [ 'rawtun', 'wireguard' ]);
+
+	// The one default the handler still writes as a plain fallback, and the
+	// address the status page tells the operator to point WireGuard at.
+	const relay = (handler.match(/\$\{listen_port:-(\d+)\}/) || [])[1];
+	check('the handler has a default relay port', relay != null, true);
+
+	PAGES.forEach(path => {
+		const src = fs.readFileSync(path, 'utf8');
+		const decl = (src.match(/var PEER_PORT = \{([^}]*)\}/) || [])[1] || '';
+		const seen = {};
+		const one = /([a-z]+):\s*'(\d+)'/g;
+		let d;
+
+		while ((d = one.exec(decl)) !== null)
+			seen[d[1]] = d[2];
+
+		check(`${path} agrees with the handler on the peer ports`, seen, ports);
+		check(`${path} agrees with the handler on the relay port`,
+			(src.match(/var RELAY_PORT = '(\d+)'/) || [])[1], relay);
+	});
+}
+
+// --- a WireGuard tunnel writes no routing ----------------------------------
+// It adds no route of its own, so a rule steering the lan at its table finds
+// nothing there - and with the kill switch, that table's only route refuses
+// everything. The lan would be black-holed by a tunnel that is working, which
+// is the same failure the uninstall sweep exists for. The two flags go
+// inactive on the tab, and an inactive option is not removed unless it has
+// rmempty, which these clear; the mode field takes them instead.
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+
+	// created as a RAW-IP tunnel, so both sections exist to begin with
+	const opts = load(uci, { defaultroute: '1', ip4table: null });
+	check('the tunnel starts with routing to lose',
+		[ uci.get('network', 'qwdtt0_rule', 'in'),
+		  uci.get('network', 'qwdtt0_killswitch', 'type') ],
+		[ 'lan', 'unreachable' ]);
+
+	opts.mode.write('qwdtt0', 'wireguard');
+	check('switching to wireguard takes the rule and the kill switch with it',
+		[ uci.get('network', 'qwdtt0_rule'),
+		  uci.get('network', 'qwdtt0_killswitch') ], [ null, null ]);
+
+	// and the other way round leaves what is there alone
+	const back = makeUci();
+	back.add('network', 'interface', 'qwdtt0');
+	back.set('network', 'qwdtt0', 'proto', 'qwdtt');
+	const again = load(back, { defaultroute: '1', ip4table: null });
+	again.mode.write('qwdtt0', 'rawtun');
+	check('staying on rawtun keeps them',
+		[ back.get('network', 'qwdtt0_rule', 'in'),
+		  back.get('network', 'qwdtt0_killswitch', 'type') ],
+		[ 'lan', 'unreachable' ]);
+}
+
 // --- the messages the interface page shows ---------------------------------
 // Each one is a single line in the status box on Network -> Interfaces and in
 // the Status column of Status -> qWDTT, which wrap past about seventy

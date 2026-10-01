@@ -187,7 +187,9 @@ func main() {
 		}
 	}
 	deviceID := flag.String("device-id", deviceIDDefault, "unique device ID")
-	connPassword := flag.String("password", fileConfig.Password, "connection password")
+	connPassword := flag.String("password", fileConfig.Password, "connection password (or QWDTT_PASSWORD in the environment)")
+	vkClientID := flag.String("vk-client-id", fileConfig.VKClientID, "VK application id for the anonymous path, replacing the built-in pair (or QWDTT_VK_CLIENT_ID)")
+	vkClientSecret := flag.String("vk-client-secret", fileConfig.VKClientSec, "VK application secret to go with -vk-client-id (or QWDTT_VK_CLIENT_SECRET)")
 	captchaModeDefault := fileConfig.CaptchaMode
 	if captchaModeDefault == "" {
 		captchaModeDefault = "auto"
@@ -314,8 +316,28 @@ func main() {
 		log.Fatal("[CLIENT] No VK hashes")
 	}
 
+	// /proc/<pid>/cmdline is readable by everyone on the router and
+	// /proc/<pid>/environ by root alone, and the password used to be in the
+	// readable one. The flags stay for a client started by hand.
 	if *connPassword == "" {
-		log.Fatal("[CLIENT] -password is required: the WRAP key is now derived from the connection password")
+		*connPassword = os.Getenv("QWDTT_PASSWORD")
+	}
+	if *vkClientID == "" {
+		*vkClientID = os.Getenv("QWDTT_VK_CLIENT_ID")
+	}
+	if *vkClientSecret == "" {
+		*vkClientSecret = os.Getenv("QWDTT_VK_CLIENT_SECRET")
+	}
+	if (*vkClientID == "") != (*vkClientSecret == "") {
+		log.Fatal("[CLIENT] -vk-client-id and -vk-client-secret go together")
+	}
+	if *vkClientID != "" {
+		vkCredentialsList = []VKCredentials{{ClientID: *vkClientID, ClientSecret: *vkClientSecret}}
+		log.Printf("[CLIENT] VK application %s, from the configuration", *vkClientID)
+	}
+
+	if *connPassword == "" {
+		log.Fatal("[CLIENT] -password or QWDTT_PASSWORD is required: every packet is sealed with a key derived from it")
 	}
 
 	// Built once here: every packet is sealed with it.
@@ -380,17 +402,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Listen locally (SO_REUSEADDR - a quick restart without "address already in use")
-	localConn, err := listenUDP(*listen)
-	if err != nil {
-		log.Fatalf("[CLIENT] Listener error %s: %v", *listen, err)
+	// Only the modes that relay through it: a rawtun tunnel is given no local
+	// conn at all (NewDispatcherPendingTUN below), so binding one there only
+	// claimed 127.0.0.1:9000 against every other tunnel on the router.
+	var localConn net.PacketConn
+	if activeConnMode != "rawtun" {
+		conn, listenErr := listenUDP(*listen)
+		if listenErr != nil {
+			notifyNetifdListenFailed()
+			log.Fatalf("[CLIENT] Listener error %s: %v", *listen, listenErr)
+		}
+		if uc, ok := conn.(*net.UDPConn); ok {
+			_ = uc.SetReadBuffer(socketBufSize)
+			_ = uc.SetWriteBuffer(socketBufSize)
+		}
+		localConn = conn
+		stopLocalConn := context.AfterFunc(ctx, func() { _ = localConn.Close() })
+		defer stopLocalConn()
+
+		// Up from this moment, and not before: the relay is listening.
+		if *netifd && activeConnMode == "vpn" {
+			if err := notifyNetifdRelayUp(); err != nil {
+				log.Printf("[NETIFD] reporting the relay up: %v", err)
+			}
+		}
 	}
-	if uc, ok := localConn.(*net.UDPConn); ok {
-		_ = uc.SetReadBuffer(socketBufSize)
-		_ = uc.SetWriteBuffer(socketBufSize)
-	}
-	stopLocalConn := context.AfterFunc(ctx, func() { _ = localConn.Close() })
-	defer stopLocalConn()
 
 	_, localPort, _ := net.SplitHostPort(*listen)
 	if localPort == "" {
@@ -551,10 +587,11 @@ func main() {
 				fmt.Printf("║ %-44s ║\n", line)
 			}
 			fmt.Println("╚══════════════════════════════════════════════╝")
-			if err := os.WriteFile("wg-turn.conf", []byte(finalConf+"\n"), 0600); err != nil {
+			confPath := netifdWGConfPath()
+			if err := os.WriteFile(confPath, []byte(finalConf+"\n"), 0600); err != nil {
 				log.Printf("[CONFIG] Error saving: %v", err)
 			} else {
-				log.Println("[CONFIG] Saved to wg-turn.conf")
+				log.Printf("[CONFIG] Saved to %s", confPath)
 			}
 
 			if activeConnMode == "socks" {
