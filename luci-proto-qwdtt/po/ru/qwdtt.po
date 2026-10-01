@@ -146,6 +146,9 @@ msgstr "Подключаться к TURN по TCP вместо UDP. Обходи
 msgid "No server address is set"
 msgstr "Не задан адрес сервера"
 
+msgid "No connection password is set"
+msgstr "Не задан пароль подключения"
+
 msgid "No VK call hash is set"
 msgstr "Не задан ни один хеш звонка VK"
 

@@ -113,6 +113,16 @@ proto_qwdtt_setup() {
 		proto_block_restart "$config"
 		return 1
 	}
+	# Every packet is sealed with a key derived from this, so the client has
+	# nothing to do without it and exits - and netifd starts it again the
+	# instant it does, with no backoff. Measured on a router: 349 starts in
+	# thirty seconds, with the interface page showing nothing at all.
+	[ -n "$password" ] || {
+		logger -t qwdtt "network.$config.password is not set"
+		proto_notify_error "$config" "MISSING_PASSWORD"
+		proto_block_restart "$config"
+		return 1
+	}
 	# The interface name is the TUN device, and the kernel takes 15 characters.
 	[ ${#config} -le 15 ] || {
 		logger -t qwdtt "network.$config: the name is longer than 15 characters, which cannot be an interface name"

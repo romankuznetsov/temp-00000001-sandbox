@@ -296,6 +296,7 @@ function dropSection(name) {
 [
 	[ 'MISSING_PEER_HOST',      _('No server address is set') ],
 	[ 'MISSING_HASH',           _('No VK call hash is set') ],
+	[ 'MISSING_PASSWORD',       _('No connection password is set') ],
 	[ 'NAME_TOO_LONG',          _('Interface name longer than 15 characters (the TUN device limit)') ],
 	[ 'MISSING_IP4TABLE',       _('No routing table (ip4table) set; the tunnel needs its own') ],
 	[ 'MISSING_DEVICE_ID',      _('No device ID is set') ],

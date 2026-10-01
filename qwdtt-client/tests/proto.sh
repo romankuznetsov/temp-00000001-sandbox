@@ -154,7 +154,7 @@ refusal() {
 	fail=1
 }
 
-SECTIONS="$SECTIONS noserver nohash waytoolongfortun mainte twin loose nodevice sleeper waker"
+SECTIONS="$SECTIONS noserver nohash nopass waytoolongfortun mainte twin loose nodevice sleeper waker"
 
 set_cfg noserver.proto qwdtt
 set_cfg noserver.ip4table 51822
@@ -166,9 +166,19 @@ set_cfg nohash.ip4table 51823
 set_cfg nohash.peer_host vpn3.example
 refusal "a tunnel with no hashes" nohash MISSING_HASH
 
+# The client exits without one and netifd restarts it with no backoff, so an
+# unset password is a restart storm rather than an error anyone can see.
+set_cfg nopass.proto qwdtt
+set_cfg nopass.ip4table 51827
+set_cfg nopass.peer_host vpn9.example
+set_cfg nopass.hash jjj
+set_cfg nopass.device_id openwrt-nopass
+refusal "a tunnel with no password" nopass MISSING_PASSWORD
+
 set_cfg waytoolongfortun.proto qwdtt
 set_cfg waytoolongfortun.ip4table 51824
 set_cfg waytoolongfortun.peer_host vpn4.example
+set_cfg waytoolongfortun.password p4
 set_cfg waytoolongfortun.hash eee
 refusal "a name no interface can have" waytoolongfortun NAME_TOO_LONG
 
@@ -177,6 +187,7 @@ refusal "a name no interface can have" waytoolongfortun NAME_TOO_LONG
 # the tunnel it is carrying.
 set_cfg mainte.proto qwdtt
 set_cfg mainte.peer_host vpn5.example
+set_cfg mainte.password p5
 set_cfg mainte.hash fff
 refusal "a default route with no table to put it in" mainte MISSING_IP4TABLE
 
@@ -184,6 +195,7 @@ refusal "a default route with no table to put it in" mainte MISSING_IP4TABLE
 # the operator writes the routes and the table is theirs to choose.
 set_cfg loose.proto qwdtt
 set_cfg loose.peer_host vpn6.example
+set_cfg loose.password p6
 set_cfg loose.device_id openwrt-loose
 set_cfg loose.hash ggg
 set_cfg loose.defaultroute 0
@@ -202,6 +214,7 @@ esac
 set_cfg nodevice.proto qwdtt
 set_cfg nodevice.ip4table 51826
 set_cfg nodevice.peer_host vpn8.example
+set_cfg nodevice.password p8
 set_cfg nodevice.hash iii
 refusal "a tunnel with no device_id" nodevice MISSING_DEVICE_ID
 
@@ -211,6 +224,7 @@ refusal "a tunnel with no device_id" nodevice MISSING_DEVICE_ID
 set_cfg twin.proto qwdtt
 set_cfg twin.ip4table 51825
 set_cfg twin.peer_host vpn7.example
+set_cfg twin.password p7
 set_cfg twin.hash hhh
 set_cfg twin.device_id openwrt-qwdtt0
 refusal "two tunnels with one device_id" twin DUPLICATE_DEVICE_ID
@@ -222,12 +236,14 @@ refusal "two tunnels with one device_id" twin DUPLICATE_DEVICE_ID
 set_cfg sleeper.proto qwdtt
 set_cfg sleeper.ip4table 51828
 set_cfg sleeper.peer_host vpnA.example
+set_cfg sleeper.password pA
 set_cfg sleeper.hash kkk
 set_cfg sleeper.device_id openwrt-shared
 set_cfg sleeper.disabled 1
 set_cfg waker.proto qwdtt
 set_cfg waker.ip4table 51829
 set_cfg waker.peer_host vpnB.example
+set_cfg waker.password pB
 set_cfg waker.hash lll
 set_cfg waker.device_id openwrt-shared
 SECTION=waker
