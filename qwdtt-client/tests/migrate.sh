@@ -138,17 +138,7 @@ network.work.password=p2
 network.work.peer_host=vpn2.example
 network.work.proto=qwdtt
 network.work.turn_tcp=1
-network.work=interface
-network.work_killswitch.interface=loopback
-network.work_killswitch.metric=1000000
-network.work_killswitch.table=51821
-network.work_killswitch.target=0.0.0.0/0
-network.work_killswitch.type=unreachable
-network.work_killswitch=route
-network.work_rule.lookup=51821
-network.work_rule.mark=0x100/0xff00
-network.work_rule.priority=9000
-network.work_rule=rule'
+network.work=interface'
 check "the converted config" "$got" "$(printf '%s\n' "$want" | sort)"
 
 # dns is renamed because netifd already defines dns on every interface as the
@@ -158,6 +148,18 @@ if grep -q '^network\.qwdtt0\.dns=' "$NETWORK"; then
 	echo "dns was copied under its old name, which collides with netifd's own"
 	fail=1
 fi
+
+# A disabled tunnel keeps no rule and no kill switch. The old client added its
+# rule while it was running, so a disabled one had none; written anyway, the
+# rule sends traffic at a table whose only route is the unreachable default,
+# and a switched-off tunnel starts refusing packets.
+case $log in
+*'qwdtt.work is disabled'*) ;;
+*)
+	echo "a disabled tunnel was converted without saying its routing was left out:"
+	echo "$log"
+	fail=1 ;;
+esac
 
 # Nothing may be dropped quietly. lan_interface named a device where a rule
 # names a logical interface, and only the operator knows whether br-guest is

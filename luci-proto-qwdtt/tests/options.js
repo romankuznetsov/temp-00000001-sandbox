@@ -449,6 +449,28 @@ function check(what, got, want) {
 	});
 }
 
+// --- opening a WireGuard tunnel does not give it routing ------------------
+// A wireguard-mode tunnel made over uci has no ip4table, because the handler
+// asks for one only in rawtun mode. Seeding on sight staged a table, a lan
+// rule and a kill switch for it; the two flags depend on rawtun so they sit
+// inactive and do not take them away, and the mode write handler only runs
+// when the mode changes. Saving then pointed the lan at a table whose one
+// route refuses everything.
+{
+	const uci = makeUci();
+	uci.add('network', 'interface', 'qwdtt0');
+	uci.set('network', 'qwdtt0', 'proto', 'qwdtt');
+	uci.set('network', 'qwdtt0', 'mode', 'wireguard');
+
+	load(uci, { defaultroute: '1', ip4table: null });
+
+	check('opening a wireguard tunnel seeds no table, rule or kill switch',
+		[ uci.get('network', 'qwdtt0', 'ip4table'),
+		  uci.get('network', 'qwdtt0_rule'),
+		  uci.get('network', 'qwdtt0_killswitch') ],
+		[ null, null, null ]);
+}
+
 // --- a WireGuard tunnel writes no routing ----------------------------------
 // It adds no route of its own, so a rule steering the lan at its table finds
 // nothing there - and with the kill switch, that table's only route refuses

@@ -45,8 +45,10 @@ diff before it lands. `.claude/settings.json` denies `gh pr merge` to stop it
 happening by reflex, but the rule matters more than the guard: there is more
 than one way to merge a pull request.
 
-Release bumps are no exception. The `PKG_VERSION` commit goes through a PR
-like anything else, and the tag is pushed only once that has been merged.
+Release bumps are no exception: the `PKG_VERSION` commit goes through a PR
+like anything else. Do not push the tag afterwards. `release.yml` creates it
+with the release, from the merge commit, and a hand-pushed tag starts a
+second release of the same version.
 
 ## Reference only what the reader can see
 

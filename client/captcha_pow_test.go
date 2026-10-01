@@ -340,6 +340,54 @@ func TestLexJSKeywordAfterADotIsAPropertyName(t *testing.T) {
 	}
 }
 
+// "of" is the one entry in the keyword set that can also be a variable name,
+// which a minifier may well produce. It opens a regex only where the for-of
+// that gives it that meaning puts it, straight after the loop variable.
+func TestLexJSOfIsAKeywordOnlyInAForOf(t *testing.T) {
+	regexes := func(src string) int {
+		n := 0
+		for _, tok := range lexJS(src) {
+			if tok.Kind == jsTRegex {
+				n++
+			}
+		}
+		return n
+	}
+
+	for _, src := range []string{"of / 2 / y", "var of = 1; of / 2 / y", "a = of / 2 / y"} {
+		if n := regexes(src); n != 0 {
+			t.Errorf("%s: %d regexes, want 0 - of is a variable here", src, n)
+		}
+	}
+	if n := regexes("for (const m of /a+/g.exec(s)) {}"); n != 1 {
+		t.Errorf("for-of over a literal regex: %d regexes, want 1", n)
+	}
+}
+
+// A backslash before any line terminator is a continuation and produces
+// nothing. Only the newline was known, so CRLF put a stray carriage return
+// in the value and then ended the string early, and U+2028 or U+2029 left
+// two bytes of their UTF-8 behind.
+func TestLexJSLineContinuations(t *testing.T) {
+	for name, term := range map[string]string{
+		"lf":    "\n",
+		"crlf":  "\r\n",
+		"u2028": "\u2028",
+		"u2029": "\u2029",
+	} {
+		src := "var s = 'ab\\" + term + "cd';"
+		var got string
+		for _, tok := range lexJS(src) {
+			if tok.Kind == jsTString {
+				got = tok.Val
+			}
+		}
+		if got != "abcd" {
+			t.Errorf("%s: string is %q, want abcd", name, got)
+		}
+	}
+}
+
 func TestParseJSNumber(t *testing.T) {
 	for in, want := range map[string]int{
 		"2": 2, "0x2": 2, "0X10": 16, "0o7": 7, "0b101": 5,

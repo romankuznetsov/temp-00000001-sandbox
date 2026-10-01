@@ -72,6 +72,10 @@ jobs:
 
       - name: Decide what needs building
         id: decide
+        # Through the environment, not expanded into the script: a fork names
+        # its own branch, and a name holding $(...) would otherwise run here.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           if [ "${{ inputs.full }}" = "true" ] ||
              [ "${{ github.event_name }}" = "workflow_dispatch" ] ||
@@ -80,22 +84,6 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             echo "packages=true" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-
-          # A release/v* branch carries one thing by construction: PKG_VERSION
-          # in both Makefiles, which Bump version has already checked is
-          # x.y.z and which the version job checks again before publishing.
-          # Building it here spent about 18 minutes reproving that, and the
-          # release the merge starts rebuilds all of it anyway, before anything
-          # is published.
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            case "${{ github.head_ref }}" in
-            release/v*)
-              echo "version bump only; the release after the merge builds it"
-              echo "code=false" >> "$GITHUB_OUTPUT"
-              echo "packages=false" >> "$GITHUB_OUTPUT"
-              exit 0 ;;
-            esac
           fi
 
           # The merge of that same bump lands here as a push, and its diff is
@@ -150,6 +138,30 @@ jobs:
             changed=$(git diff --name-only "$base" "$head")
           fi
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
+
+          # A release/v* branch is meant to carry one thing: PKG_VERSION in
+          # both Makefiles, which Bump version has already checked is x.y.z
+          # and which the version job checks again before publishing. Building
+          # it here spent about 18 minutes reproving that, and the release the
+          # merge starts rebuilds all of it anyway.
+          #
+          # Asked of the diff rather than of the branch name. The name is only
+          # a convention, and anything else riding on such a branch would have
+          # skipped every check that would have caught it.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            case "$HEAD_REF" in
+            release/v*)
+              others=$(echo "$changed" |
+                grep -vE '^(qwdtt-client|luci-proto-qwdtt)/Makefile$' | grep -c .)
+              if [ "$others" = 0 ]; then
+                echo "version bump only; the release after the merge builds it"
+                echo "code=false" >> "$GITHUB_OUTPUT"
+                echo "packages=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "release branch carries $others file(s) beyond the version; building" ;;
+            esac
+          fi
           if echo "$changed" |
              grep -qE '^client/|^\.github/(workflows|scripts)/|^build\.sh$'; then
             echo "code=true" >> "$GITHUB_OUTPUT"

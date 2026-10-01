@@ -89,6 +89,13 @@ func lexJS(src string) []jsToken {
 					return false
 				}
 			}
+			// Everything else in the set is a reserved word and cannot name a
+			// variable. "of" can, and a minifier may well produce one, so it
+			// counts as the keyword only where the for-of that gives it that
+			// meaning puts it: straight after the loop variable.
+			if last.Val == "of" {
+				return len(toks) >= 2 && toks[len(toks)-2].Kind == jsTIdent
+			}
 			return jsRegexPrecKw[last.Val]
 		case jsTNumber, jsTString, jsTTemplate, jsTRegex:
 			return false
@@ -199,6 +206,23 @@ func lexJS(src string) []jsToken {
 						}
 					case '\n':
 						// line continuation: produces nothing
+					case '\r':
+						// CRLF is one line terminator. Taken as two, the \r landed in
+						// the value and the \n after it ended the string as though it
+						// were unterminated.
+						if i+1 < n && src[i+1] == '\n' {
+							i++
+						}
+					case 0xE2:
+						// U+2028 and U+2029 terminate a line as well, and are three
+						// bytes each in UTF-8. Left alone they put a stray two bytes
+						// into the value.
+						if i+2 < n && src[i+1] == 0x80 &&
+							(src[i+2] == 0xA8 || src[i+2] == 0xA9) {
+							i += 2
+						} else {
+							b = append(b, esc)
+						}
 					default:
 						b = append(b, esc)
 					}

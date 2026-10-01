@@ -50,7 +50,8 @@ for sec in $(uci -q show qwdtt | sed -n "s/^qwdtt\.\([^.=]*\)=qwdtt$/\1/p"); do
 	uci -q set "network.$sec=interface"
 	uci -q set "network.$sec.proto=qwdtt"
 	uci -q set "network.$sec.ip4table=$table"
-	[ "$(get "$sec" enabled)" = 1 ] || uci -q set "network.$sec.disabled=1"
+	enabled=$(get "$sec" enabled)
+	[ "$enabled" = 1 ] || uci -q set "network.$sec.disabled=1"
 
 	copy "$sec" peer_host    peer_host
 	copy "$sec" peer_port    peer_port
@@ -79,6 +80,16 @@ for sec in $(uci -q show qwdtt | sed -n "s/^qwdtt\.\([^.=]*\)=qwdtt$/\1/p"); do
 	# br-lan belongs to in a stock configuration; a router that arranged its
 	# LAN differently has to correct this, which is why the old value is
 	# logged rather than guessed at.
+	# Only for a tunnel that runs. The old client added its rule while it was
+	# running, so a disabled one had none; written anyway, the rule sends the
+	# LAN at a table whose only route is the unreachable default below, and
+	# every packet it matches is refused by a tunnel that is switched off.
+	# Two of them at one priority made it worse, since the kernel orders them
+	# by insertion and nothing says which went in first.
+	if [ "$enabled" != 1 ]; then
+		say "qwdtt.$sec is disabled: network.$sec carries no rule and no kill switch, tick both on the qWDTT tab when you enable it"
+	else
+
 	uci -q set "network.${sec}_rule=rule"
 	uci -q set "network.${sec}_rule.lookup=$table"
 	uci -q set "network.${sec}_rule.priority=$priority"
@@ -96,6 +107,8 @@ for sec in $(uci -q show qwdtt | sed -n "s/^qwdtt\.\([^.=]*\)=qwdtt$/\1/p"); do
 	uci -q set "network.${sec}_killswitch.type=unreachable"
 	uci -q set "network.${sec}_killswitch.table=$table"
 	uci -q set "network.${sec}_killswitch.metric=$KILL_METRIC"
+
+	fi
 
 	say "qwdtt.$sec is now network.$sec: route_table $table is its ip4table, rule_priority $priority is network.${sec}_rule"
 	[ -z "$lan" ] || [ "$lan" = br-lan ] ||

@@ -305,9 +305,12 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v5
 
+  # After the feed, not beside it: --target publishes the tag as well, so a
+  # release that went out while signing or Pages had failed would name an
+  # install feed nobody can reach, with the tag already spent.
   release:
     name: Publish release
-    needs: [version, build]
+    needs: [version, build, feed]
     # A dispatch republishes the feed and releases nothing, so this is the one
     # place that asks whether a release is actually being made.
     if: >-
