@@ -208,3 +208,18 @@ msgstr "Звонок VK, которому принадлежит этот хеш
 
 msgid "The server did not answer: check the address, port and password"
 msgstr "Сервер не ответил: проверьте адрес, порт и пароль"
+
+msgid "Per-session upload limit"
+msgstr "Ограничение отдачи на сессию"
+
+msgid "Per-session download limit"
+msgstr "Ограничение приёма на сессию"
+
+msgid "Kbit/s each session may send to its VK relay, so that a session looks like an ordinary call rather than a bulk transfer. The whole tunnel is limited to this times the number of sessions that come up, and that total is what traffic inside the tunnel has to live within. Keep it above about 1 Mbit/s: below that a transfer cannot hold a window open and goes stop-go rather than slow, so at the usual session count a call-sized 64 to 256 is both plausible and steady. Left empty, nothing is paced."
+msgstr "Сколько Кбит/с одна сессия может отдавать своему ретранслятору VK, чтобы сессия выглядела обычным звонком, а не перекачкой данных. Весь туннель ограничен этим значением, умноженным на число поднявшихся сессий, и именно в этот общий предел должен уместиться трафик внутри туннеля. Держите его выше примерно 1 Мбит/с: ниже передача не может удержать окно и начинает идти рывками, а не просто медленно, поэтому при обычном числе сессий 64-256 и правдоподобно, и стабильно. Пустое поле - без ограничения."
+
+msgid "Kbit/s each session may receive from its VK relay, times the number of sessions for the tunnel as a whole. This one shapes rather than blocks: a packet is only here because the relay already carried it, so what the limit does is hold it back until the transfers inside the tunnel slow down and stop asking for more. They take a round trip to notice, and traffic that ignores congestion is simply discarded after VK has already counted it. Set the total below what the tunnel downloads unpaced, or the limit and the path fight over the same bytes and you get less than either alone: measured, a total of 1.2 Mbit/s arrived at 91% of budget without a single retransmission, while a total set level with the path made it worse than no limit at all. Left empty, nothing is paced."
+msgstr "Сколько Кбит/с одна сессия может принимать от своего ретранслятора VK, умноженное на число сессий для туннеля целиком. Это ограничение не запрещает, а придерживает: пакет уже здесь только потому, что ретранслятор его пронёс, поэтому ограничение лишь задерживает его, пока передачи внутри туннеля не замедлятся и не перестанут запрашивать больше. Им нужен круговой путь, чтобы это заметить, а трафик, который не реагирует на перегрузку, просто отбрасывается уже после того, как VK его посчитал. Задавайте общий предел ниже того, что туннель скачивает без ограничения, иначе ограничение и канал начнут спорить за одни и те же байты и выйдет хуже, чем каждое по отдельности: по замерам, общий предел 1,2 Мбит/с выбирался на 91% без единой повторной передачи, а предел вровень с каналом дал результат хуже, чем вообще без ограничения. Пустое поле - без ограничения."
+
+msgid "none"
+msgstr "нет"

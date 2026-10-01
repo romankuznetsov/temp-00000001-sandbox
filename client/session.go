@@ -224,6 +224,7 @@ func RunSession(
 	var firstWrapUp uint32
 	var firstWrapDown uint32
 	var firstWireWrite uint32
+	sendLimiter := tunnelSendLimiter
 	var firstWireRead uint32
 
 	if len(creds.TurnURLs) == 0 {
@@ -564,7 +565,7 @@ func RunSession(
 	// Register with the dispatcher
 	slot := &WorkerSlot{
 		ID:     sessionID,
-		SendCh: make(chan []byte, workerSendBuf),
+		SendCh: make(chan []byte, workerSendBufFor(sessionSendLimit)),
 		PrioCh: make(chan []byte, prioBuf),
 	}
 	d.Register(slot)
@@ -687,6 +688,17 @@ func RunSession(
 			// socket buffer, a bad network) would hold the Writer for half an hour
 			// while this worker's SendCh/PrioCh queue piles up and/or is dropped
 			// by the dispatcher above (see readLoop in dispatcher.go).
+			// Paced here because this is the one place every packet leaves
+			// by, whichever transport is underneath. The bucket is shared
+			// with every other session, so holding this Writer holds the
+			// tunnel rather than pushing the next chunk onto a relay that is
+			// no freer than this one.
+			if sendLimiter != nil {
+				if err := sendLimiter.WaitN(sessCtx, len(pkt)); err != nil {
+					putPktBuf(pkt)
+					return
+				}
+			}
 			_ = activeConn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 			if atomic.CompareAndSwapUint32(&firstWireWrite, 0, 1) {
 				log.Printf("[WORKER #%d] [DEBUG] Sent the FIRST packet into the connection (%d bytes)", sessionID, len(pkt))

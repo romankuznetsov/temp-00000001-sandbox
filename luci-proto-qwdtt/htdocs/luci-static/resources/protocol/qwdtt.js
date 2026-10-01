@@ -658,6 +658,77 @@ return network.registerProtocol('qwdtt', {
 			return true;
 		};
 
+		/* Paced per session rather than per relay or in total, because the
+		   session is what VK allocates and meters: several sessions share one
+		   relay address, so a per-address limit would describe nothing VK
+		   sees. The tunnel's ceiling becomes roughly this times the number of
+		   sessions, which is why the hint says so - these are the two settings
+		   here that trade throughput away on purpose. */
+		/* The asymmetry in the hint is the honest part: the upload limit
+		   decides what crosses the relay, while this one can only decide what
+		   is let out of the client afterwards. It still works, because the
+		   flows inside slow down and stop asking for as much - but a round
+		   trip later, and not at all for traffic that ignores congestion. */
+		o = s.taboption('qwdtt', form.Value, 'rate_down', _('Per-session download limit'),
+			withDefault(_('none'), _('Kbit/s each session may receive from its VK relay, times the number of sessions for the tunnel as a whole. This one shapes rather than blocks: a packet is only here because the relay already carried it, so what the limit does is hold it back until the transfers inside the tunnel slow down and stop asking for more. They take a round trip to notice, and traffic that ignores congestion is simply discarded after VK has already counted it. Set the total below what the tunnel downloads unpaced, or the limit and the path fight over the same bytes and you get less than either alone: measured, a total of 1.2 Mbit/s arrived at 91% of budget without a single retransmission, while a total set level with the path made it worse than no limit at all. Left empty, nothing is paced.')));
+		o.datatype = 'uinteger';
+		o.placeholder = _('none');
+
+		o = s.taboption('qwdtt', form.Value, 'rate_up', _('Per-session upload limit'),
+			withDefault(_('none'), _('Kbit/s each session may send to its VK relay, so that a session looks like an ordinary call rather than a bulk transfer. The whole tunnel is limited to this times the number of sessions that come up, and that total is what traffic inside the tunnel has to live within. Keep it above about 1 Mbit/s: below that a transfer cannot hold a window open and goes stop-go rather than slow, so at the usual session count a call-sized 64 to 256 is both plausible and steady. Left empty, nothing is paced.')));
+		o.datatype = 'uinteger';
+		o.placeholder = _('none');
+
+		/* Every default below is the one the protocol handler falls back to,
+		   so a new tunnel opens showing what it will actually run with instead
+		   of a row of empty fields. LuCI writes nothing for a field still equal
+		   to its default, which is what keeps the section free of options the
+		   handler would have supplied anyway. */
+
+		o = s.taboption('qwdtt', form.Value, 'go_dns', _('DNS for VK'),
+			withDefault('yandex', _('Resolver the client uses to reach VK, which is not the resolver the tunnel hands out: yandex, cloudflare or google, their doh- variants, or custom:IP and doh:URL.')));
+		o.default = 'yandex';
+
+		o = s.taboption('qwdtt', form.ListValue, 'obfs', _('Obfuscation'),
+			withDefault(_('audio'), _('What the tunnel is disguised as inside the VK call.')));
+		o.value('audio', _('audio'));
+		o.value('video', _('video'));
+		o.default = 'audio';
+
+		o = s.taboption('qwdtt', form.ListValue, 'captcha_mode', _('Captcha mode'),
+			withDefault('auto', _('How a VK captcha is answered. auto tries the built-in solver and falls back.')));
+		o.value('auto', 'auto');
+		o.value('rjs', 'rjs');
+		o.value('wv', 'wv');
+		o.default = 'auto';
+
+		/* vk_auth and vk_creds_file are not offered here. Account mode wants a
+		   supervising process to hand it fresh TURN credentials over stdin
+		   every few minutes - the phone app is one, a router is not - and the
+		   credentials a file can carry are dropped nine minutes after the
+		   client reads them, after which every worker waits five minutes for an
+		   answer that is not coming. The protocol handler still passes both, so
+		   a router that has something to feed it can set them with uci. */
+
+		o = s.taboption('qwdtt', form.ListValue, 'vk_anon_path', _('Anonymous path'),
+			withDefault('vkcalls', _('Which VK endpoint an anonymous join goes through.')));
+		o.value('vkcalls', 'vkcalls');
+		o.value('legacy', 'legacy');
+		o.default = 'vkcalls';
+
+		/* The port matters as much as the flag and is easy to miss: -listen-direct
+		   is a listener of its own, not the same one without DTLS, so a tunnel
+		   left on the default port meets a listener that will not answer it and
+		   reports the timeout as a password problem. */
+		o = s.taboption('qwdtt', form.Flag, 'no_dtls', _('Disable DTLS'),
+			withDefault(_('off'), _('Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, which is a separate listener on a port of its own - set Peer port to that port as well, or the tunnel will not come up.')));
+
+		o = s.taboption('qwdtt', form.Flag, 'turn_tcp', _('TURN over TCP'),
+			withDefault(_('off'), _('Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom.')));
+
+		/* Last on the tab, and the two of them together: they are the only
+		   settings here that write sections of their own rather than a value,
+		   and the kill switch is read against the rule above it. */
 		/* Both routing flags are RAW-IP only, and not merely as a tidiness: a
 		   WireGuard-mode interface adds no route of its own, so a rule steering
 		   the LAN at its table would find nothing there - and with the kill
@@ -734,53 +805,5 @@ return network.registerProtocol('qwdtt', {
 		o.remove = function(section_id) {
 			dropSection(section_id + '_killswitch');
 		};
-
-		/* Every default below is the one the protocol handler falls back to,
-		   so a new tunnel opens showing what it will actually run with instead
-		   of a row of empty fields. LuCI writes nothing for a field still equal
-		   to its default, which is what keeps the section free of options the
-		   handler would have supplied anyway. */
-
-		o = s.taboption('qwdtt', form.Value, 'go_dns', _('DNS for VK'),
-			withDefault('yandex', _('Resolver the client uses to reach VK, which is not the resolver the tunnel hands out: yandex, cloudflare or google, their doh- variants, or custom:IP and doh:URL.')));
-		o.default = 'yandex';
-
-		o = s.taboption('qwdtt', form.ListValue, 'obfs', _('Obfuscation'),
-			withDefault(_('audio'), _('What the tunnel is disguised as inside the VK call.')));
-		o.value('audio', _('audio'));
-		o.value('video', _('video'));
-		o.default = 'audio';
-
-		o = s.taboption('qwdtt', form.ListValue, 'captcha_mode', _('Captcha mode'),
-			withDefault('auto', _('How a VK captcha is answered. auto tries the built-in solver and falls back.')));
-		o.value('auto', 'auto');
-		o.value('rjs', 'rjs');
-		o.value('wv', 'wv');
-		o.default = 'auto';
-
-		/* vk_auth and vk_creds_file are not offered here. Account mode wants a
-		   supervising process to hand it fresh TURN credentials over stdin
-		   every few minutes - the phone app is one, a router is not - and the
-		   credentials a file can carry are dropped nine minutes after the
-		   client reads them, after which every worker waits five minutes for an
-		   answer that is not coming. The protocol handler still passes both, so
-		   a router that has something to feed it can set them with uci. */
-
-		o = s.taboption('qwdtt', form.ListValue, 'vk_anon_path', _('Anonymous path'),
-			withDefault('vkcalls', _('Which VK endpoint an anonymous join goes through.')));
-		o.value('vkcalls', 'vkcalls');
-		o.value('legacy', 'legacy');
-		o.default = 'vkcalls';
-
-		/* The port matters as much as the flag and is easy to miss: -listen-direct
-		   is a listener of its own, not the same one without DTLS, so a tunnel
-		   left on the default port meets a listener that will not answer it and
-		   reports the timeout as a password problem. */
-		o = s.taboption('qwdtt', form.Flag, 'no_dtls', _('Disable DTLS'),
-			withDefault(_('off'), _('Direct mode: RTP-obfs AEAD over TURN without DTLS. The server has to be started with -listen-direct, which is a separate listener on a port of its own - set Peer port to that port as well, or the tunnel will not come up.')));
-
-		o = s.taboption('qwdtt', form.Flag, 'turn_tcp', _('TURN over TCP'),
-			withDefault(_('off'), _('Reach the TURN relay over TCP instead of UDP. Works around UDP throttling on some networks, for example Rostelecom.')));
-
 	}
 });

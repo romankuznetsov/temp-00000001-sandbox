@@ -291,6 +291,25 @@ case $got in
 	fail=1 ;;
 esac
 
+# Absent unless set: an empty -rate-down or -rate-up would be a limit of
+# nothing rather than no limit.
+set_cfg work.rate_down 400
+set_cfg work.rate_up 150
+SECTION=work
+case $(proto_qwdtt_setup work 2>&1 | sed -n 's/^run: //p') in
+*"-rate-down 400"*"-rate-up 150"*) ;;
+*)
+	echo "the per-session limits were not passed, or not in that order:"
+	proto_qwdtt_setup work 2>&1 | sed -n 's/^run: //p'
+	fail=1 ;;
+esac
+saved=$CFG
+CFG=$(echo "$CFG" | grep -v '^work\.rate_')
+case $(proto_qwdtt_setup work 2>&1 | sed -n 's/^run: //p') in
+*-rate-*) echo "an unset limit was passed as a limit of nothing"; fail=1 ;;
+esac
+CFG=$saved
+
 # --- wireguard mode ---------------------------------------------------------
 
 # The other shape entirely: no TUN device of its own, a local endpoint instead,

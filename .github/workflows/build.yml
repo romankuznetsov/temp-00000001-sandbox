@@ -237,6 +237,14 @@ jobs:
       - name: LuCI routing options
         run: node luci-proto-qwdtt/tests/options.js
 
+      # The status page reads what the client and the up-script leave in
+      # /var/run/qwdtt, and a file written under a name its backend does not
+      # know is simply never read: the page shows a dash and says nothing is
+      # wrong. That is how a wireguard-mode tunnel came to report no workers
+      # at all while carrying traffic.
+      - name: LuCI status backend
+        run: node luci-proto-qwdtt/tests/runtime.js
+
   client:
     name: client ${{ matrix.name }}
     needs: [changes, check]

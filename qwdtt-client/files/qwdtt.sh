@@ -162,6 +162,8 @@ proto_qwdtt_init_config() {
 	proto_config_add_string  "config_file"
 	proto_config_add_string  "vk_client_id"
 	proto_config_add_string  "vk_client_secret"
+	proto_config_add_int     "rate_down"
+	proto_config_add_int     "rate_up"
 	proto_config_add_boolean "no_dtls"
 	proto_config_add_boolean "turn_tcp"
 }
@@ -190,11 +192,11 @@ proto_qwdtt_setup() {
 	local config="$1"
 	local mode peer_host peer_port listen_port password device_id workers go_dns obfs
 	local captcha_mode vk_auth vk_anon_path vk_creds_file vk_client_id vk_client_secret
-	local config_file no_dtls turn_tcp hashes ip4table defaultroute owner
+	local config_file rate_down rate_up no_dtls turn_tcp hashes ip4table defaultroute owner
 
 	json_get_vars mode peer_host peer_port listen_port password device_id workers go_dns obfs \
 		captcha_mode vk_auth vk_anon_path vk_creds_file vk_client_id vk_client_secret \
-		config_file no_dtls turn_tcp
+		config_file rate_down rate_up no_dtls turn_tcp
 
 	mode="${mode:-rawtun}"
 	case "$mode" in
@@ -340,6 +342,8 @@ proto_qwdtt_setup() {
 		-vk-anon-path "${vk_anon_path:-vkcalls}"
 	[ -z "$vk_creds_file" ] || set -- "$@" -vk-creds-file "$vk_creds_file"
 	[ -z "$config_file" ] || set -- "$@" -config "$config_file"
+	[ -z "$rate_down" ] || set -- "$@" -rate-down "$rate_down"
+	[ -z "$rate_up" ] || set -- "$@" -rate-up "$rate_up"
 	# Only passed when on: Go's flag package reads a bare -notls as true.
 	[ "$no_dtls" != 1 ] || set -- "$@" -notls
 	[ "$turn_tcp" != 1 ] || set -- "$@" -turn-tcp

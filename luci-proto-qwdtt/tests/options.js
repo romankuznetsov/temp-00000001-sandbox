@@ -129,6 +129,16 @@ function check(what, got, want) {
 		opts._lanroute.cfgvalue('qwdtt0'), '1');
 	check('both point at the table the tunnel was seeded with',
 		uci.get('network', 'qwdtt0_killswitch', 'table'), '51820');
+
+	// The two of them write sections of their own rather than a value, and the
+	// kill switch's description is written against the rule above it, so they
+	// belong together and at the end rather than among the plain settings.
+	check('the routing flags come last on the tab, in that order',
+		Object.keys(opts).slice(-2), [ '_lanroute', '_killswitch' ]);
+
+	check('the two pacing limits are adjacent, download first',
+		Object.keys(opts).filter(k => k == 'rate_up' || k == 'rate_down'),
+		[ 'rate_down', 'rate_up' ]);
 }
 
 // --- deleting a tunnel takes its routing with it ---------------------------
@@ -405,10 +415,9 @@ function check(what, got, want) {
 // at a port nobody mentioned looks exactly like a server that is not there.
 {
 	const handler = fs.readFileSync('qwdtt-client/files/qwdtt.sh', 'utf8');
-	// The status page names the same ports and is checked here too once it
-	// learns about wireguard mode.
 	const PAGES = [
-		'luci-proto-qwdtt/htdocs/luci-static/resources/protocol/qwdtt.js'
+		'luci-proto-qwdtt/htdocs/luci-static/resources/protocol/qwdtt.js',
+		'luci-proto-qwdtt/htdocs/luci-static/resources/view/qwdtt/status.js'
 	];
 
 	const ports = {};
