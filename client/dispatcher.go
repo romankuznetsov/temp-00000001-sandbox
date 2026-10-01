@@ -10,25 +10,30 @@ import (
 	"time"
 )
 
+// Every packet in both directions goes through this pool, which exists so
+// that the packet path allocates nothing. Pointers to arrays rather than
+// slices: a slice put into the pool is boxed into an interface, and boxing a
+// 24-byte header is an allocation - one per packet, measured at 24 B/op on
+// the very path the pool is meant to keep clean. A pointer fits in the
+// interface word and costs nothing.
+const pktBufSize = 2048
+
 var pktPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, 2048)
-	},
+	New: func() any { return new([pktBufSize]byte) },
 }
 
 func getPktBuf(size int) []byte {
-	b := pktPool.Get().([]byte)
-	if cap(b) < size {
-		b = make([]byte, size)
+	if size > pktBufSize {
+		return make([]byte, size)
 	}
-	return b[:size]
+	return pktPool.Get().(*[pktBufSize]byte)[:size]
 }
 
 func putPktBuf(b []byte) {
-	if cap(b) < 2048 {
+	if cap(b) < pktBufSize {
 		return
 	}
-	pktPool.Put(b[:cap(b)])
+	pktPool.Put((*[pktBufSize]byte)(b[:pktBufSize]))
 }
 
 const (
