@@ -301,7 +301,8 @@ jobs:
         run: |
           mkdir -p apkroot/etc/apk/keys
           cp keys/qwdtt.pem apkroot/etc/apk/keys/qwdtt.pem
-          tar -C apkroot -czf dist/qwdtt-apk-key.tar.gz etc
+          # Owned by root: a restore unpacks these over /etc and keeps the owner.
+          tar --owner=0 --group=0 --numeric-owner -C apkroot -czf dist/qwdtt-apk-key.tar.gz etc
           tar -tzvf dist/qwdtt-apk-key.tar.gz
 
           # opkg finds a key by its id: a usign public key is a 2-byte tag, then the 8-byte id.
@@ -310,7 +311,7 @@ jobs:
           echo "usign key id: $keyid"
           mkdir -p opkgroot/etc/opkg/keys
           cp keys/qwdtt-usign.pub "opkgroot/etc/opkg/keys/$keyid"
-          tar -C opkgroot -czf dist/qwdtt-opkg-key.tar.gz etc
+          tar --owner=0 --group=0 --numeric-owner -C opkgroot -czf dist/qwdtt-opkg-key.tar.gz etc
           tar -tzvf dist/qwdtt-opkg-key.tar.gz
 
       - name: Publish

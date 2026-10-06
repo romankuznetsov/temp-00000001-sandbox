@@ -84,7 +84,19 @@ apk update && apk upgrade qwdtt-client luci-proto-qwdtt luci-i18n-qwdtt-ru     #
 ```
 
 Настройки туннелей хранятся в стандартном файле `/etc/config/network` и при обновлении
-сохраняются.
+сохраняются. После обновления перезапустить туннели - Restart на странице интерфейса
+или `ifup qwdtt0`, - чтобы заработала новая версия клиента.
+
+**Удаление.**
+
+```sh
+opkg remove luci-i18n-qwdtt-ru luci-proto-qwdtt qwdtt-client   # 24.10
+apk del luci-i18n-qwdtt-ru luci-proto-qwdtt qwdtt-client       # 25.12
+```
+
+Интерфейсы туннелей в `/etc/config/network` при этом остаются. Если туннель работал
+в режиме WireGuard, перед удалением удалить интерфейс `qwdtt0_wg` и его правило
+`qwdtt0_wg_rule`.
 
 ## Настройка
 
@@ -203,12 +215,12 @@ uci set network.qwdtt0_wg_rule.in='lan'
 uci set network.qwdtt0_wg_rule.lookup='51821'
 uci set network.qwdtt0_wg_rule.priority='9998'
 
-uci set firewall.qwdtt0_wg_snat=nat
-uci set firewall.qwdtt0_wg_snat.name='qwdtt0_wg-masq'
-uci set firewall.qwdtt0_wg_snat.family='ipv4'
-uci set firewall.qwdtt0_wg_snat.src='qwdtt'
-uci set firewall.qwdtt0_wg_snat.device='qwdtt0_wg'
-uci set firewall.qwdtt0_wg_snat.target='MASQUERADE'
+uci set firewall.qwdtt0_wg_nat=nat
+uci set firewall.qwdtt0_wg_nat.name='qwdtt0_wg-masq'
+uci set firewall.qwdtt0_wg_nat.family='ipv4'
+uci set firewall.qwdtt0_wg_nat.src='qwdtt'
+uci set firewall.qwdtt0_wg_nat.device='qwdtt0_wg'
+uci set firewall.qwdtt0_wg_nat.target='MASQUERADE'
 
 uci commit network
 uci commit firewall
