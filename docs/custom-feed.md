@@ -211,7 +211,7 @@ opkg update && opkg install --noaction luci-proto-qwdtt
 архитектуру и ветку OpenWrt, ставит ключ, добавляет feed и пакеты.
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/romankuznetsov/qwdtt-openwrt/main/install.sh | sh
+sh <(wget -O - https://raw.githubusercontent.com/romankuznetsov/qwdtt-openwrt/main/install.sh)
 ```
 
 Настройка клиента после установки описана в [README](../README.md).

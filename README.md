@@ -31,20 +31,18 @@ UCI и веб-интерфейс LuCI, а также с отдельной ст�
 Выполнить на роутере по SSH:
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/romankuznetsov/qwdtt-openwrt/main/install.sh | sh
+sh <(wget -O - https://raw.githubusercontent.com/romankuznetsov/qwdtt-openwrt/main/install.sh)
 ```
 
 Скрипт определяет менеджер пакетов, добавляет feed и его ключ, устанавливает
 `qwdtt-client`, `luci-proto-qwdtt` и русский перевод. Дальше - раздел
 [Настройка](#настройка).
 
-Опции передаются после `sh -s --`, например
-`wget -qO- .../install.sh | sh -s -- -e`:
+Без установки пакета с русским переводом `luci-i18n-qwdtt-ru`:
 
-| Опция | Что делает |
-| --- | --- |
-| `-e` | не ставить русский перевод LuCI |
-| `-h` | показать справку |
+```sh
+sh <(wget -O - https://raw.githubusercontent.com/romankuznetsov/qwdtt-openwrt/main/install.sh) -en
+```
 
 ## Возможности
 
