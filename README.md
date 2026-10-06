@@ -144,15 +144,15 @@ ifup qwdtt0
    сервера по умолчанию 56000, «Порт локальной точки подключения» - 9000, у
    каждого туннеля свой. Save & Apply.
 2. Скопировать содержимое `/var/run/qwdtt/qwdtt0.wg` (для этого нужен SSH).
-3. Network -> Interfaces -> Add new interface, протокол WireGuard, имя `wg0`.
-   На вкладке General Settings нажать Import configuration -> Load
-   configuration и вставить скопированное: ключи, адрес и узел заполнятся
-   сами.
+3. Network -> Interfaces -> Add new interface, протокол WireGuard, имя
+   `qwdtt0_wg` - имя туннеля с `_wg`: так интерфейс окажется в списке сразу
+   под туннелем и сам попадет в зону межсетевого экрана `qwdtt`. На вкладке
+   General Settings нажать Import configuration -> Load configuration и
+   вставить скопированное: ключи, адрес и узел заполнятся сами.
 4. На вкладке Advanced Settings задать Override IPv4 routing table,
    например `51821`. У узла включить Route Allowed IPs.
-5. На вкладке Firewall Settings создать для `wg0` новую зону, затем в
-   Network -> Firewall включить в ней Masquerading и разрешить forward из
-   зоны `lan`.
+5. В Network -> Firewall -> NAT Rules добавить правило: Outbound zone
+   `qwdtt`, Outbound device `qwdtt0_wg`, Action MASQUERADE.
 6. В Network -> Routing -> IPv4 Rules добавить правило: Incoming interface
    `lan`, Table `51821`. Save & Apply.
 
@@ -175,42 +175,37 @@ ifup qwdtt0
 интерфейс WireGuard:
 
 ```sh
-uci set network.wg0=interface
-uci set network.wg0.proto='wireguard'
-uci set network.wg0.private_key='PrivateKey_ИЗ_ФАЙЛА'
-uci add_list network.wg0.addresses='Address_ИЗ_ФАЙЛА'
-uci set network.wg0.mtu='1280'
-uci set network.wg0.ip4table='51821'
+uci set network.qwdtt0_wg=interface
+uci set network.qwdtt0_wg.proto='wireguard'
+uci set network.qwdtt0_wg.private_key='PrivateKey_ИЗ_ФАЙЛА'
+uci add_list network.qwdtt0_wg.addresses='Address_ИЗ_ФАЙЛА'
+uci set network.qwdtt0_wg.mtu='1280'
+uci set network.qwdtt0_wg.ip4table='51821'
 
-uci set network.wg0_peer=wireguard_wg0
-uci set network.wg0_peer.public_key='PublicKey_ИЗ_ФАЙЛА'
-uci set network.wg0_peer.endpoint_host='127.0.0.1'
-uci set network.wg0_peer.endpoint_port='9000'
-uci set network.wg0_peer.persistent_keepalive='25'
-uci add_list network.wg0_peer.allowed_ips='0.0.0.0/0'
-uci set network.wg0_peer.route_allowed_ips='1'
+uci set network.qwdtt0_wg_peer=wireguard_qwdtt0_wg
+uci set network.qwdtt0_wg_peer.public_key='PublicKey_ИЗ_ФАЙЛА'
+uci set network.qwdtt0_wg_peer.endpoint_host='127.0.0.1'
+uci set network.qwdtt0_wg_peer.endpoint_port='9000'
+uci set network.qwdtt0_wg_peer.persistent_keepalive='25'
+uci add_list network.qwdtt0_wg_peer.allowed_ips='0.0.0.0/0'
+uci set network.qwdtt0_wg_peer.route_allowed_ips='1'
 
-uci set network.wg0_rule=rule
-uci set network.wg0_rule.in='lan'
-uci set network.wg0_rule.lookup='51821'
-uci set network.wg0_rule.priority='9998'
+uci set network.qwdtt0_wg_rule=rule
+uci set network.qwdtt0_wg_rule.in='lan'
+uci set network.qwdtt0_wg_rule.lookup='51821'
+uci set network.qwdtt0_wg_rule.priority='9998'
 
-uci set firewall.wg=zone
-uci set firewall.wg.name='wg'
-uci add_list firewall.wg.network='wg0'
-uci set firewall.wg.input='DROP'
-uci set firewall.wg.output='ACCEPT'
-uci set firewall.wg.forward='REJECT'
-uci set firewall.wg.masq='1'
-uci set firewall.wg.mtu_fix='1'
-uci set firewall.wg_lan=forwarding
-uci set firewall.wg_lan.src='lan'
-uci set firewall.wg_lan.dest='wg'
+uci set firewall.qwdtt0_wg_snat=nat
+uci set firewall.qwdtt0_wg_snat.name='qwdtt0_wg-masq'
+uci set firewall.qwdtt0_wg_snat.family='ipv4'
+uci set firewall.qwdtt0_wg_snat.src='qwdtt'
+uci set firewall.qwdtt0_wg_snat.device='qwdtt0_wg'
+uci set firewall.qwdtt0_wg_snat.target='MASQUERADE'
 
 uci commit network
 uci commit firewall
 /etc/init.d/firewall reload
-ifup wg0
+ifup qwdtt0_wg
 ```
 
 </details>
